@@ -3,7 +3,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
 
 export async function updateSession(request: NextRequest) {
-  if (!isSupabaseAuthConfigured()) return NextResponse.next({ request });
+  if (!isSupabaseAuthConfigured()) {
+    const isAuthRoute = request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/auth/");
+    if (isAuthRoute || request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next({ request });
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("error", "Application configuration is incomplete. Ask the administrator to check the Vercel environment variables.");
+    return NextResponse.redirect(url);
+  }
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(

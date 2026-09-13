@@ -8,6 +8,8 @@ A modern invoice and payment-tracking application for meat deliveries to Metro s
 - The owner can review, edit, issue, cancel, and record payments.
 - Combined customer payments are allocated only to invoices the owner explicitly selects.
 - The application never automatically settles other outstanding invoices.
+- Invoice numbers are generated automatically in a unique sequence, starting at `000173` when no higher number exists.
+- Only the owner can create, edit, activate, or deactivate catalog products.
 - Expenses, purchasing costs, labor, taxes, wastage, and profit tracking are intentionally out of scope.
 
 ## Technology
@@ -72,6 +74,7 @@ npm run build
 - `/` dashboard and collection summary
 - `/invoices` invoice register
 - `/invoices/new` invoice preparation
+- `/products` owner-only product catalog
 - `/payments/new` owner-only manual payment allocation
 - `/team` owner-only team overview
 

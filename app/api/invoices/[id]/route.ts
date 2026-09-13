@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { requireApiMember } from "@/lib/authz";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
-import { auditLogs, invoiceItems, invoices, paymentAllocations } from "@/lib/db/schema";
+import { auditLogs, invoiceItems, invoices, paymentAllocations, products } from "@/lib/db/schema";
 import { normalizeInvoicePayload } from "@/lib/invoice-payload";
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -19,8 +19,13 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       const allocations = await tx.select({ id: paymentAllocations.id }).from(paymentAllocations).where(eq(paymentAllocations.invoiceId, id)).limit(1);
       if (allocations.length) throw new Error("An invoice with a recorded payment cannot be edited.");
 
+      const productIds = [...new Set(payload.items.map((item) => item.product_id).filter((value): value is string => Boolean(value)))];
+      if (productIds.length !== payload.items.length) throw new Error("Select a product for every invoice line.");
+      const productRows = await tx.select().from(products).where(inArray(products.id, productIds));
+      if (productRows.length !== productIds.length) throw new Error("One or more selected products no longer exist.");
+      const productMap = new Map(productRows.map((product) => [product.id, product]));
+
       await tx.update(invoices).set({
-        invoiceNumber: payload.invoice.invoice_number,
         customerName: payload.invoice.customer_name,
         customerCity: payload.invoice.customer_city,
         supplierNumber: payload.invoice.supplier_number,
@@ -34,18 +39,23 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         updatedAt: new Date().toISOString(),
       }).where(eq(invoices.id, id));
       await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
-      await tx.insert(invoiceItems).values(payload.items.map((item, position) => ({
-        invoiceId: id,
-        position,
-        mgmCode: item.mgm_code,
-        subsysCode: item.subsys_code,
-        articleName: item.article_name,
-        unit: item.unit,
-        quantityMillis: item.quantity_millis,
-        ratePaisa: item.rate_paisa,
-        totalPaisa: item.total_paisa,
-      })));
-      await tx.insert(auditLogs).values({ actorId: member.id, action: "updated", entityType: "invoice", entityId: id, details: { invoiceNumber: payload.invoice.invoice_number } });
+      await tx.insert(invoiceItems).values(payload.items.map((item, position) => {
+        const product = productMap.get(item.product_id!);
+        if (!product) throw new Error("A selected product could not be found.");
+        return {
+          invoiceId: id,
+          productId: product.id,
+          position,
+          mgmCode: product.mgmCode,
+          subsysCode: product.subsysCode,
+          articleName: product.articleName,
+          unit: product.unit,
+          quantityMillis: item.quantity_millis,
+          ratePaisa: item.rate_paisa,
+          totalPaisa: item.total_paisa,
+        };
+      }));
+      await tx.insert(auditLogs).values({ actorId: member.id, action: "updated", entityType: "invoice", entityId: id, details: { invoiceNumber: current[0].invoiceNumber } });
     });
 
     return Response.json({ id });
@@ -53,7 +63,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     const message = error instanceof Error ? error.message : "Could not update the invoice.";
     if (message === "AUTH_REQUIRED") return Response.json({ error: "Sign in to continue." }, { status: 401 });
     if (message === "OWNER_REQUIRED") return Response.json({ error: "Owner access is required." }, { status: 403 });
-    if (message.includes("invoices_invoice_number_key") || message.includes("duplicate key")) return Response.json({ error: "That invoice number already exists." }, { status: 409 });
     return Response.json({ error: message.length > 220 ? "Could not update the invoice. Check the details and try again." : message }, { status: 400 });
   }
 }

@@ -1,6 +1,7 @@
 import { parseKg, parsePkr } from "@/lib/money";
 
 type InputItem = {
+  productId?: unknown;
   mgmCode?: unknown;
   subsysCode?: unknown;
   articleName?: unknown;
@@ -10,7 +11,6 @@ type InputItem = {
 };
 
 type InvoiceInput = {
-  invoiceNumber?: unknown;
   customerName?: unknown;
   customerCity?: unknown;
   supplierNumber?: unknown;
@@ -29,7 +29,6 @@ function clean(value: unknown) {
 
 export function normalizeInvoicePayload(input: InvoiceInput) {
   const invoice = {
-    invoice_number: clean(input.invoiceNumber),
     customer_name: clean(input.customerName),
     customer_city: clean(input.customerCity),
     supplier_number: clean(input.supplierNumber),
@@ -41,8 +40,8 @@ export function normalizeInvoicePayload(input: InvoiceInput) {
     notes: clean(input.notes),
   };
 
-  if (!invoice.invoice_number || !invoice.customer_name || !invoice.store_name || !/^\d{4}-\d{2}-\d{2}$/.test(invoice.invoice_date)) {
-    throw new Error("Invoice number, customer, store and a valid date are required.");
+  if (!invoice.customer_name || !invoice.store_name || !/^\d{4}-\d{2}-\d{2}$/.test(invoice.invoice_date)) {
+    throw new Error("Customer, store and a valid date are required.");
   }
 
   const rawItems = Array.isArray(input.items) ? input.items as InputItem[] : [];
@@ -52,6 +51,7 @@ export function normalizeInvoicePayload(input: InvoiceInput) {
     const articleName = clean(item.articleName);
     if (!articleName || quantityMillis === null || quantityMillis <= 0 || ratePaisa === null || ratePaisa <= 0) return null;
     return {
+      product_id: clean(item.productId) || null,
       mgm_code: clean(item.mgmCode),
       subsys_code: clean(item.subsysCode),
       article_name: articleName,

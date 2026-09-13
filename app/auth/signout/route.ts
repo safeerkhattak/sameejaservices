@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
 
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  if (isSupabaseAuthConfigured()) {
+    const supabase = await createClient();
+    await supabase.auth.signOut();
+  }
   const requestUrl = new URL(request.url);
   const next = safeReturnTo(requestUrl.searchParams.get("next") ?? "/");
   const loginUrl = new URL("/login", request.url);
@@ -15,8 +18,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  if (isSupabaseAuthConfigured()) {
+    const supabase = await createClient();
+    await supabase.auth.signOut();
+  }
   return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
 }
 

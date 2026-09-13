@@ -22,6 +22,13 @@
       "when": 1789312353998,
       "tag": "0002_numerous_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789336266112,
+      "tag": "0003_wild_riptide",
+      "breakpoints": true
     }
   ]
 }

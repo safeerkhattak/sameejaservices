@@ -25,6 +25,7 @@ The system does not process bank payments. The master user records a payment aft
 | Cancel an unpaid invoice | Yes | No |
 | Record or allocate payments | Yes | No |
 | Create and manage staff accounts | Yes | No |
+| Create, edit, activate or deactivate products | Yes | No |
 
 There is exactly one master account. Staff accounts are created only by that master user.
 
@@ -53,16 +54,26 @@ From the same Team screen, the master can reset a staff password, disable the ac
 ## 5. Creating an invoice draft
 
 1. Open **New invoice**.
-2. Enter the invoice number and invoice date.
+2. Enter the invoice date. The application assigns the next unique invoice number automatically when the draft is submitted.
 3. Enter the Metro store, store number and available reference details such as PO number and goods receiving number.
-4. For every delivered article, select the product and enter the received quantity and Metro rate.
+4. For every delivered article, select the product and enter the received quantity and Metro rate. The product's unit is shown in its own invoice column.
 5. Confirm the automatically calculated line prices and invoice total.
 6. Add an optional note.
 7. Select **Submit draft**.
 
 After submission, a staff user cannot change the invoice. This protects the submitted record. The master user can review and correct it before or after issuing it, provided no payment has been recorded against it.
 
-## 6. Reviewing and issuing invoices
+## 6. Managing products
+
+1. Sign in as the master user and open **Products**.
+2. Select **Add product**.
+3. Enter the article name, MGM code, Subsys code, unit and an optional default Metro rate.
+4. Keep measurements out of the article name; for example, use `Whole FQ Veal` as the article and `Kg` as its unit.
+5. Edit a product when its catalog details change, or deactivate it to remove it from new invoice entry.
+
+Deactivation never changes old invoices. Each invoice keeps the name, codes and unit that were saved when it was created.
+
+## 7. Reviewing and issuing invoices
 
 1. Sign in as the master user.
 2. Open **Invoices** and select an invoice marked **Awaiting review**.
@@ -73,7 +84,7 @@ After submission, a staff user cannot change the invoice. This protects the subm
 
 An invoice with a recorded payment cannot be edited. A paid invoice cannot be cancelled because doing so would invalidate its payment history.
 
-## 7. Recording full, partial or combined payments
+## 8. Recording full, partial or combined payments
 
 1. Sign in as the master user.
 2. Open **Payments → Record payment**.
@@ -85,7 +96,7 @@ An invoice with a recorded payment cannot be edited. A paid invoice cannot be ca
 
 The system never automatically applies money to all old invoices. For a combined payment, the master explicitly chooses every invoice and amount. A partial payment leaves the remaining invoice balance outstanding for a future payment.
 
-## 8. Invoice statuses
+## 9. Invoice statuses
 
 - **Awaiting review:** A draft was submitted and needs master approval.
 - **Unpaid:** The invoice is issued but has no allocated payment.
@@ -93,7 +104,7 @@ The system never automatically applies money to all old invoices. For a combined
 - **Paid:** Allocated payments equal the invoice total.
 - **Cancelled:** The invoice no longer counts toward outstanding balances.
 
-## 9. Dashboard and registers
+## 10. Dashboard and registers
 
 The master dashboard shows total issued invoices, payments received, outstanding balance, collection percentage, fully paid invoices, partially paid invoices and unpaid invoices.
 
@@ -101,7 +112,7 @@ The **Invoices** register shows every invoice, the amount received, remaining ba
 
 The **Payments** register shows every recorded payment and the exact invoice allocations chosen by the master.
 
-## 10. Data storage and security
+## 11. Data storage and security
 
 - Application data is persisted in Supabase PostgreSQL.
 - Authentication accounts are stored in Supabase Auth.
@@ -112,14 +123,14 @@ The **Payments** register shows every recorded payment and the exact invoice all
 
 Before production deployment, rotate any database password or secret key that has been shared in a message, screenshot or public location. Put replacement values directly into `.env.local` for development and Vercel Environment Variables for production.
 
-## 11. Current scope
+## 12. Current scope
 
 The software intentionally does not track meat purchase cost, operating expenses, labor, tax, wastage or profit. Those modules can be added later if the client requests them.
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 - **Cannot sign in:** Confirm that the Auth user exists, the password is correct and the account is active on the Team screen.
 - **Account not authorized:** The master must create that staff account from the Team screen.
 - **Cannot edit an invoice:** Staff cannot edit submitted drafts, and invoices with payments are locked.
 - **Cannot record a payment:** Only the master can record payments; the complete received amount must be allocated manually.
-- **Invoice number already exists:** Use the correct unique invoice number or open the existing invoice.
+- **No products are available:** The master must add and activate products from the Products screen.

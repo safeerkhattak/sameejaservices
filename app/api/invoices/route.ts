@@ -1,5 +1,6 @@
+import { inArray, sql } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
-import { auditLogs, invoiceItems, invoices } from "@/lib/db/schema";
+import { auditLogs, invoiceItems, invoices, products } from "@/lib/db/schema";
 import { requireApiMember } from "@/lib/authz";
 import { normalizeInvoicePayload } from "@/lib/invoice-payload";
 
@@ -11,8 +12,23 @@ export async function POST(request: Request) {
     const totalPaisa = payload.items.reduce((sum, item) => sum + item.total_paisa, 0);
 
     const id = await getDatabase().transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(2355801)`);
+      const maxRows = await tx.select({
+        value: sql<number>`coalesce(max(case when ${invoices.invoiceNumber} ~ '^[0-9]+$' then ${invoices.invoiceNumber}::bigint end), 172)`,
+      }).from(invoices);
+      const nextNumber = Math.max(173, Number(maxRows[0]?.value ?? 172) + 1);
+      const invoiceNumber = String(nextNumber).padStart(6, "0");
+
+      const productIds = [...new Set(payload.items.map((item) => item.product_id).filter((value): value is string => Boolean(value)))];
+      if (productIds.length !== payload.items.length) throw new Error("Select a product for every invoice line.");
+      const productRows = await tx.select().from(products).where(inArray(products.id, productIds));
+      if (productRows.length !== productIds.length || productRows.some((product) => !product.isActive)) {
+        throw new Error("One or more selected products are unavailable. Refresh and try again.");
+      }
+      const productMap = new Map(productRows.map((product) => [product.id, product]));
+
       const inserted = await tx.insert(invoices).values({
-        invoiceNumber: payload.invoice.invoice_number,
+        invoiceNumber,
         customerName: payload.invoice.customer_name,
         customerCity: payload.invoice.customer_city,
         supplierNumber: payload.invoice.supplier_number,
@@ -24,21 +40,26 @@ export async function POST(request: Request) {
         totalPaisa,
         notes: payload.invoice.notes,
         createdBy: member.id,
-      }).returning({ id: invoices.id });
+      }).returning({ id: invoices.id, invoiceNumber: invoices.invoiceNumber });
       const invoiceId = inserted[0].id;
 
-      await tx.insert(invoiceItems).values(payload.items.map((item, position) => ({
-        invoiceId,
-        position,
-        mgmCode: item.mgm_code,
-        subsysCode: item.subsys_code,
-        articleName: item.article_name,
-        unit: item.unit,
-        quantityMillis: item.quantity_millis,
-        ratePaisa: item.rate_paisa,
-        totalPaisa: item.total_paisa,
-      })));
-      await tx.insert(auditLogs).values({ actorId: member.id, action: "created", entityType: "invoice", entityId: invoiceId, details: { invoiceNumber: payload.invoice.invoice_number } });
+      await tx.insert(invoiceItems).values(payload.items.map((item, position) => {
+        const product = productMap.get(item.product_id!);
+        if (!product) throw new Error("A selected product could not be found.");
+        return {
+          invoiceId,
+          productId: product.id,
+          position,
+          mgmCode: product.mgmCode,
+          subsysCode: product.subsysCode,
+          articleName: product.articleName,
+          unit: product.unit,
+          quantityMillis: item.quantity_millis,
+          ratePaisa: item.rate_paisa,
+          totalPaisa: item.total_paisa,
+        };
+      }));
+      await tx.insert(auditLogs).values({ actorId: member.id, action: "created", entityType: "invoice", entityId: invoiceId, details: { invoiceNumber: inserted[0].invoiceNumber } });
       return invoiceId;
     });
 
@@ -46,7 +67,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create the invoice.";
     if (message === "AUTH_REQUIRED") return Response.json({ error: "Sign in to continue." }, { status: 401 });
-    if (message.includes("invoices_invoice_number_key") || message.includes("duplicate key")) return Response.json({ error: "That invoice number already exists." }, { status: 409 });
+    if (message.includes("invoices_invoice_number_key") || message.includes("duplicate key")) return Response.json({ error: "The next invoice number could not be allocated. Try again." }, { status: 409 });
     return Response.json({ error: message.length > 220 ? "Could not create the invoice. Check the details and try again." : message }, { status: 400 });
   }
 }

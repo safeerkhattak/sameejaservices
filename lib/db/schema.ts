@@ -14,6 +14,25 @@ export const appUsers = pgTable("app_users", {
   check("app_users_role_check", sql`${table.role} in ('owner', 'staff')`),
 ]);
 
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mgmCode: text("mgm_code").notNull(),
+  subsysCode: text("subsys_code").notNull(),
+  articleName: text("article_name").notNull(),
+  unit: text("unit").notNull().default("Kg"),
+  defaultRatePaisa: bigint("default_rate_paisa", { mode: "number" }),
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: uuid("created_by").notNull().references(() => appUsers.id),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("products_mgm_code_key").on(table.mgmCode),
+  uniqueIndex("products_subsys_code_key").on(table.subsysCode),
+  uniqueIndex("products_article_name_key").on(table.articleName),
+  index("idx_products_active").on(table.isActive),
+  check("products_default_rate_check", sql`${table.defaultRatePaisa} is null or ${table.defaultRatePaisa} >= 0`),
+]);
+
 export const invoices = pgTable("invoices", {
   id: uuid("id").primaryKey().defaultRandom(),
   invoiceNumber: text("invoice_number").notNull(),
@@ -43,6 +62,7 @@ export const invoices = pgTable("invoices", {
 export const invoiceItems = pgTable("invoice_items", {
   id: uuid("id").primaryKey().defaultRandom(),
   invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").references(() => products.id),
   position: integer("position").notNull(),
   mgmCode: text("mgm_code").notNull().default(""),
   subsysCode: text("subsys_code").notNull().default(""),
@@ -53,6 +73,7 @@ export const invoiceItems = pgTable("invoice_items", {
   totalPaisa: bigint("total_paisa", { mode: "number" }).notNull(),
 }, (table) => [
   index("idx_invoice_items_invoice").on(table.invoiceId),
+  index("idx_invoice_items_product").on(table.productId),
   check("invoice_items_quantity_check", sql`${table.quantityMillis} > 0`),
   check("invoice_items_rate_check", sql`${table.ratePaisa} > 0`),
   check("invoice_items_total_check", sql`${table.totalPaisa} >= 0`),

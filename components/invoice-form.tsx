@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { ArrowLeft, CheckCircle2, FileText, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, LockKeyhole, PackageOpen, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -15,22 +15,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { formatPkr } from "@/lib/money";
 
-const catalog = [
-  { mgm: "331394", subsys: "322313", article: "Prime Whole Carcas Goat", unit: "Kg", rate: "2320" },
-  { mgm: "331395", subsys: "322314", article: "Whole Boneless FQ (Beef)", unit: "Kg", rate: "" },
-  { mgm: "331396", subsys: "322315", article: "Whole Boneless HQ (Beef)", unit: "Kg", rate: "" },
-  { mgm: "331397", subsys: "322316", article: "Whole FQ Veal (20-30 Kg)", unit: "Kg", rate: "1200" },
-  { mgm: "331398", subsys: "322317", article: "Whole HQ Veal (20-30 Kg)", unit: "Kg", rate: "1200" },
-  { mgm: "331399", subsys: "322318", article: "Whole Beef Boneless HORECA", unit: "Kg", rate: "" },
-  { mgm: "331400", subsys: "322319", article: "Whole Beef FQ (CDLE)", unit: "Kg", rate: "780" },
-  { mgm: "331401", subsys: "322320", article: "Veal Leg only (20-30 Kg)", unit: "Kg", rate: "" },
-  { mgm: "331402", subsys: "322321", article: "Prime Whole Carcas Lamb", unit: "Kg", rate: "2450" },
-  { mgm: "338287", subsys: "256261", article: "Mutton leg safi", unit: "Kg", rate: "2300" },
-  { mgm: "331404", subsys: "322323", article: "Non Branded Mutton", unit: "Kg", rate: "1500" },
-  { mgm: "338237", subsys: "256251", article: "Mutton Shoulder safi", unit: "Kg", rate: "" },
-];
+export type InvoiceProductOption = {
+  id: string;
+  mgmCode: string;
+  subsysCode: string;
+  articleName: string;
+  unit: string;
+  defaultRate: string;
+  isActive: boolean;
+};
 
 const itemSchema = z.object({
+  productId: z.string().uuid(),
   mgmCode: z.string(),
   subsysCode: z.string(),
   articleName: z.string().min(1),
@@ -40,7 +36,6 @@ const itemSchema = z.object({
 });
 
 const formSchema = z.object({
-  invoiceNumber: z.string().trim().min(1),
   customerName: z.string().trim().min(1),
   customerCity: z.string(),
   supplierNumber: z.string(),
@@ -55,25 +50,30 @@ const formSchema = z.object({
 
 export type InvoiceFormValues = z.infer<typeof formSchema>;
 
-const blankItem = { mgmCode: "", subsysCode: "", articleName: "", unit: "Kg", quantity: "", rate: "" };
+const blankItem = { productId: "", mgmCode: "", subsysCode: "", articleName: "", unit: "", quantity: "", rate: "" };
 
 export function InvoiceForm({
   mode = "create",
   invoiceId,
   initialValues,
   demoMode,
+  products,
+  assignedInvoiceNumber,
+  canManageProducts = false,
 }: {
   mode?: "create" | "edit";
   invoiceId?: string;
   initialValues?: InvoiceFormValues;
   demoMode: boolean;
+  products: InvoiceProductOption[];
+  assignedInvoiceNumber?: string;
+  canManageProducts?: boolean;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
   const today = new Date().toISOString().slice(0, 10);
   const form = useForm<InvoiceFormValues>({
     defaultValues: initialValues ?? {
-      invoiceNumber: "",
       customerName: "Metro Cash & Carry Pakistan (Pvt.) Ltd",
       customerCity: "",
       supplierNumber: "23558",
@@ -131,7 +131,11 @@ export function InvoiceForm({
             <div><h2 className="font-bold text-[#102a43]">Invoice information</h2><p className="mt-0.5 text-sm text-slate-500">Use the reference numbers provided by Metro.</p></div>
           </div>
           <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Invoice number" required><Input {...form.register("invoiceNumber")} placeholder="e.g. 172" className="h-11 rounded-xl" /></Field>
+            <Field label="Invoice number">
+              <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-[#102a43]">
+                {assignedInvoiceNumber ? `INV-${assignedInvoiceNumber}` : "Assigned automatically when submitted"}
+              </div>
+            </Field>
             <Field label="Invoice date" required><Input type="date" {...form.register("invoiceDate")} className="h-11 rounded-xl" /></Field>
             <Field label="Supplier number"><Input {...form.register("supplierNumber")} placeholder="23558" className="h-11 rounded-xl" /></Field>
             <Field label="Store number"><Input {...form.register("storeNumber")} placeholder="e.g. 15" className="h-11 rounded-xl" /></Field>
@@ -146,14 +150,22 @@ export function InvoiceForm({
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,35,55,.04)]">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div><h2 className="font-bold text-[#102a43]">Received articles</h2><p className="mt-0.5 text-sm text-slate-500">Choose an article, then enter received quantity and Metro rate.</p></div>
-            <Button type="button" variant="outline" className="rounded-xl" onClick={() => append({ ...blankItem })}><Plus />Add article</Button>
+            <Button type="button" variant="outline" className="rounded-xl" onClick={() => append({ ...blankItem })} disabled={products.length === 0}><Plus />Add article</Button>
           </div>
-          <Table>
+          {products.length === 0 ? (
+            <div className="grid place-items-center px-6 py-14 text-center">
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-500"><PackageOpen className="h-6 w-6" /></span>
+              <h3 className="mt-4 font-bold text-[#102a43]">No products are available</h3>
+              <p className="mt-1 max-w-md text-sm leading-6 text-slate-500">{canManageProducts ? "Create your product catalog before entering an invoice." : "Ask the master user to add and activate products before creating an invoice."}</p>
+              {canManageProducts && <Button asChild className="mt-5 rounded-xl bg-[#2b7a78] hover:bg-[#246b69]"><Link href="/products"><Plus />Add first product</Link></Button>}
+            </div>
+          ) : <Table>
             <TableHeader>
               <TableRow className="bg-slate-50/70 hover:bg-slate-50/70">
                 <TableHead className="min-w-[250px] px-6">Article</TableHead>
                 <TableHead className="min-w-[105px]">MGM #</TableHead>
                 <TableHead className="min-w-[105px]">Subsys #</TableHead>
+                <TableHead className="min-w-[90px]">Unit</TableHead>
                 <TableHead className="min-w-[120px]">Quantity</TableHead>
                 <TableHead className="min-w-[120px]">Rate</TableHead>
                 <TableHead className="min-w-[130px] text-right">Price</TableHead>
@@ -167,22 +179,24 @@ export function InvoiceForm({
                 return (
                   <TableRow key={field.id} className="align-top hover:bg-transparent">
                     <TableCell className="px-6 py-4">
-                      <Select value={item.articleName || undefined} onValueChange={(name) => {
-                        const product = catalog.find((entry) => entry.article === name);
+                      <Select value={item.productId || undefined} onValueChange={(productId) => {
+                        const product = products.find((entry) => entry.id === productId);
                         if (!product) return;
-                        form.setValue(`items.${index}.articleName`, product.article);
-                        form.setValue(`items.${index}.mgmCode`, product.mgm);
-                        form.setValue(`items.${index}.subsysCode`, product.subsys);
+                        form.setValue(`items.${index}.productId`, product.id);
+                        form.setValue(`items.${index}.articleName`, product.articleName);
+                        form.setValue(`items.${index}.mgmCode`, product.mgmCode);
+                        form.setValue(`items.${index}.subsysCode`, product.subsysCode);
                         form.setValue(`items.${index}.unit`, product.unit);
-                        if (!item.rate && product.rate) form.setValue(`items.${index}.rate`, product.rate);
+                        if (!item.rate && product.defaultRate) form.setValue(`items.${index}.rate`, product.defaultRate);
                       }}>
                         <SelectTrigger className="h-11 w-full min-w-[230px] rounded-xl"><SelectValue placeholder="Select article" /></SelectTrigger>
-                        <SelectContent>{catalog.map((product) => <SelectItem key={product.mgm} value={product.article}>{product.article}</SelectItem>)}</SelectContent>
+                        <SelectContent>{products.map((product) => <SelectItem key={product.id} value={product.id} disabled={!product.isActive}>{product.articleName}{!product.isActive ? " (inactive)" : ""}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell className="py-4"><Input {...form.register(`items.${index}.mgmCode`)} readOnly className="h-11 rounded-xl bg-slate-50" /></TableCell>
                     <TableCell className="py-4"><Input {...form.register(`items.${index}.subsysCode`)} readOnly className="h-11 rounded-xl bg-slate-50" /></TableCell>
-                    <TableCell className="py-4"><div className="relative"><Input inputMode="decimal" {...form.register(`items.${index}.quantity`)} placeholder="0.000" className="h-11 rounded-xl pr-10 text-right tabular-nums" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">Kg</span></div></TableCell>
+                    <TableCell className="py-4"><Input {...form.register(`items.${index}.unit`)} readOnly className="h-11 rounded-xl bg-slate-50 text-center font-semibold" /></TableCell>
+                    <TableCell className="py-4"><Input inputMode="decimal" {...form.register(`items.${index}.quantity`)} placeholder="0.000" className="h-11 rounded-xl text-right tabular-nums" /></TableCell>
                     <TableCell className="py-4"><Input inputMode="decimal" {...form.register(`items.${index}.rate`)} placeholder="0" className="h-11 rounded-xl text-right tabular-nums" /></TableCell>
                     <TableCell className="py-4 text-right"><span className="inline-flex h-11 items-center font-bold tabular-nums text-[#102a43]">{formatPkr(linePaisa)}</span></TableCell>
                     <TableCell className="py-4 pr-4"><Button type="button" variant="ghost" size="icon" className="mt-0.5 text-slate-400 hover:text-rose-600" disabled={fields.length === 1} onClick={() => remove(index)} aria-label="Remove article"><Trash2 /></Button></TableCell>
@@ -190,7 +204,7 @@ export function InvoiceForm({
                 );
               })}
             </TableBody>
-          </Table>
+          </Table>}
           <div className="flex justify-end border-t border-slate-100 bg-slate-50/60 px-6 py-5">
             <div className="flex min-w-[260px] items-center justify-between"><span className="text-sm font-semibold text-slate-500">Invoice total</span><strong className="text-xl tracking-tight text-[#102a43]">{formatPkr(totalPaisa)}</strong></div>
           </div>
@@ -207,7 +221,7 @@ export function InvoiceForm({
           <p className="mt-4 text-3xl font-bold tracking-[-0.04em]">{formatPkr(totalPaisa)}</p>
           <p className="mt-1 text-sm text-slate-300">{items.filter((item) => Number(item.quantity) > 0 && Number(item.rate) > 0).length} completed articles</p>
           {mode === "create" && <div className="mt-6 flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#f5b942]" /><p className="text-xs leading-5 text-slate-300">After submission, staff cannot edit this draft. The owner can review and make changes.</p></div>}
-          <Button type="submit" disabled={submitting || demoMode} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">
+          <Button type="submit" disabled={submitting || demoMode || products.length === 0} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">
             <CheckCircle2 />{submitting ? "Saving…" : demoMode ? "Connect Supabase to save" : mode === "edit" ? "Update invoice" : "Submit draft"}
           </Button>
         </div>

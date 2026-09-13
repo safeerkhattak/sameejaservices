@@ -5,12 +5,15 @@ import { appUsers } from "@/lib/db/schema";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
+import { isDemoModeEnabled } from "@/lib/demo";
 
 export type Member = { id: string; email: string; displayName: string; role: "owner" | "staff"; isActive: boolean };
 
 const loadCurrentMember = cache(async (): Promise<Member | null> => {
   if (!isDatabaseConfigured() || !isSupabaseAuthConfigured()) {
-    return { id: "00000000-0000-4000-8000-000000000001", email: "owner@sameeja.test", displayName: "Business Owner", role: "owner", isActive: true };
+    return isDemoModeEnabled()
+      ? { id: "00000000-0000-4000-8000-000000000001", email: "owner@sameeja.test", displayName: "Business Owner", role: "owner", isActive: true }
+      : null;
   }
 
   const supabase = await createClient();

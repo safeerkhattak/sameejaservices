@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentMember } from "@/lib/authz";
 import { createClient } from "@/lib/supabase/server";
+import { isDatabaseConfigured } from "@/lib/db";
+import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
 
 export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -11,6 +13,7 @@ export async function signIn(formData: FormData) {
   const safeNext = nextValue.startsWith("/") && !nextValue.startsWith("//") ? nextValue : "/";
 
   if (!email || !password) redirect("/login?error=Enter+your+email+and+password");
+  if (!isSupabaseAuthConfigured() || !isDatabaseConfigured()) redirect("/login?error=Application+configuration+is+incomplete.+Check+the+Vercel+environment+variables");
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });

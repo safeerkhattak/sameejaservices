@@ -2,17 +2,16 @@ import { notFound, redirect } from "next/navigation";
 import { InvoiceForm, type InvoiceFormValues } from "@/components/invoice-form";
 import { PageHeading } from "@/components/page-heading";
 import { requireMember } from "@/lib/authz";
-import { getInvoice, isDemoMode } from "@/lib/data";
+import { getInvoice, getProducts, isDemoMode } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [member, invoice] = await Promise.all([requireMember("/invoices/" + id + "/edit"), getInvoice(id)]);
+  const [member, invoice, productRows] = await Promise.all([requireMember("/invoices/" + id + "/edit"), getInvoice(id), getProducts()]);
   if (!invoice) notFound();
   if (member.role !== "owner") redirect("/invoices/" + id);
   const initialValues: InvoiceFormValues = {
-    invoiceNumber: invoice.invoice_number,
     customerName: invoice.customer_name,
     customerCity: invoice.customer_city,
     supplierNumber: invoice.supplier_number,
@@ -23,6 +22,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     goodsReceivingNumber: invoice.goods_receiving_number,
     notes: invoice.notes,
     items: [...(invoice.invoice_items ?? [])].sort((a, b) => a.position - b.position).map((item) => ({
+      productId: item.product_id ?? "",
       mgmCode: item.mgm_code,
       subsysCode: item.subsys_code,
       articleName: item.article_name,
@@ -31,5 +31,6 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
       rate: String(item.rate_paisa / 100),
     })),
   };
-  return <div className="mx-auto w-full max-w-[1480px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9"><PageHeading eyebrow="Owner review" title={"Edit invoice " + invoice.invoice_number} description="Correct the draft or issued invoice while preserving a record of the change." /><InvoiceForm mode="edit" invoiceId={id} initialValues={initialValues} demoMode={isDemoMode()} /></div>;
+  const products = productRows.map((product) => ({ id: product.id, mgmCode: product.mgm_code, subsysCode: product.subsys_code, articleName: product.article_name, unit: product.unit, defaultRate: product.default_rate_paisa === null ? "" : String(product.default_rate_paisa / 100), isActive: product.is_active }));
+  return <div className="mx-auto w-full max-w-[1480px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9"><PageHeading eyebrow="Owner review" title={"Edit invoice " + invoice.invoice_number} description="Correct the draft or issued invoice while preserving a record of the change." /><InvoiceForm mode="edit" invoiceId={id} initialValues={initialValues} demoMode={isDemoMode()} products={products} assignedInvoiceNumber={invoice.invoice_number} canManageProducts /></div>;
 }
