@@ -1,4 +1,6 @@
-import { isSupabaseConfigured, supabaseRequest } from "@/lib/supabase";
+import { asc, desc, eq, inArray } from "drizzle-orm";
+import { getDatabase, isDatabaseConfigured } from "@/lib/db";
+import { appUsers, invoiceItems, invoices, paymentAllocations, payments } from "@/lib/db/schema";
 
 export type InvoiceItemRecord = {
   id: string;
@@ -89,14 +91,29 @@ export function effectiveStatus(invoice: InvoiceRecord) {
 }
 
 export async function getInvoices(): Promise<InvoiceRecord[]> {
-  if (!isSupabaseConfigured()) return demoInvoices;
-  return supabaseRequest<InvoiceRecord[]>("invoices?select=*,invoice_items(*),payment_allocations(amount_paisa)&order=invoice_date.desc,created_at.desc&limit=200");
+  if (!isDatabaseConfigured()) return demoInvoices;
+  const database = getDatabase();
+  const invoiceRows = await database.select().from(invoices).orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt)).limit(200);
+  const ids = invoiceRows.map((invoice) => invoice.id);
+  const allocationRows = ids.length
+    ? await database.select({ invoiceId: paymentAllocations.invoiceId, amountPaisa: paymentAllocations.amountPaisa }).from(paymentAllocations).where(inArray(paymentAllocations.invoiceId, ids))
+    : [];
+  const allocations = new Map<string, { amount_paisa: number }[]>();
+  allocationRows.forEach((allocation) => allocations.set(allocation.invoiceId, [...(allocations.get(allocation.invoiceId) ?? []), { amount_paisa: allocation.amountPaisa }]));
+  return invoiceRows.map((invoice) => toInvoiceRecord(invoice, [], allocations.get(invoice.id) ?? []));
 }
 
 export async function getInvoice(id: string): Promise<InvoiceRecord | null> {
-  if (!isSupabaseConfigured()) return demoInvoices.find((invoice) => invoice.id === id) ?? null;
-  const rows = await supabaseRequest<InvoiceRecord[]>("invoices?id=eq." + encodeURIComponent(id) + "&select=*,invoice_items(*),payment_allocations(amount_paisa)&invoice_items.order=position.asc&limit=1");
-  return rows[0] ?? null;
+  if (!isDatabaseConfigured()) return demoInvoices.find((invoice) => invoice.id === id) ?? null;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return null;
+  const database = getDatabase();
+  const rows = await database.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+  if (!rows[0]) return null;
+  const [items, allocations] = await Promise.all([
+    database.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id)).orderBy(asc(invoiceItems.position)),
+    database.select({ amountPaisa: paymentAllocations.amountPaisa }).from(paymentAllocations).where(eq(paymentAllocations.invoiceId, id)),
+  ]);
+  return toInvoiceRecord(rows[0], items.map(toInvoiceItemRecord), allocations.map((allocation) => ({ amount_paisa: allocation.amountPaisa })));
 }
 
 export async function getOpenInvoices() {
@@ -105,18 +122,74 @@ export async function getOpenInvoices() {
 }
 
 export async function getPayments(): Promise<PaymentRecord[]> {
-  if (!isSupabaseConfigured()) return demoPayments;
-  return supabaseRequest<PaymentRecord[]>("payments?select=*,payment_allocations(amount_paisa,invoices(invoice_number,store_name))&order=payment_date.desc,created_at.desc&limit=100");
+  if (!isDatabaseConfigured()) return demoPayments;
+  const database = getDatabase();
+  const paymentRows = await database.select().from(payments).orderBy(desc(payments.paymentDate), desc(payments.createdAt)).limit(100);
+  const ids = paymentRows.map((payment) => payment.id);
+  const allocationRows = ids.length
+    ? await database.select({ paymentId: paymentAllocations.paymentId, amountPaisa: paymentAllocations.amountPaisa, invoiceNumber: invoices.invoiceNumber, storeName: invoices.storeName })
+      .from(paymentAllocations)
+      .innerJoin(invoices, eq(invoices.id, paymentAllocations.invoiceId))
+      .where(inArray(paymentAllocations.paymentId, ids))
+    : [];
+  const allocations = new Map<string, NonNullable<PaymentRecord["payment_allocations"]>>();
+  allocationRows.forEach((allocation) => allocations.set(allocation.paymentId, [...(allocations.get(allocation.paymentId) ?? []), { amount_paisa: allocation.amountPaisa, invoices: { invoice_number: allocation.invoiceNumber, store_name: allocation.storeName } }]));
+  return paymentRows.map((payment) => ({
+    id: payment.id,
+    customer_name: payment.customerName,
+    payment_date: payment.paymentDate,
+    amount_paisa: payment.amountPaisa,
+    reference_number: payment.referenceNumber,
+    notes: payment.notes,
+    created_at: payment.createdAt,
+    payment_allocations: allocations.get(payment.id) ?? [],
+  }));
 }
 
-export async function getTeam(): Promise<{ id: string; display_name: string; email: string; role: "owner" | "staff"; created_at: string }[]> {
-  if (!isSupabaseConfigured()) return [
-    { id: "demo-owner", display_name: "Business Owner", email: "owner@sameeja.test", role: "owner", created_at: "2026-07-01T00:00:00Z" },
-    { id: "demo-staff", display_name: "Invoice Staff", email: "staff@sameeja.test", role: "staff", created_at: "2026-07-02T00:00:00Z" },
+export async function getTeam(): Promise<{ id: string; display_name: string; email: string; role: "owner" | "staff"; is_active: boolean; created_at: string }[]> {
+  if (!isDatabaseConfigured()) return [
+    { id: "demo-owner", display_name: "Business Owner", email: "owner@sameeja.test", role: "owner", is_active: true, created_at: "2026-07-01T00:00:00Z" },
+    { id: "demo-staff", display_name: "Invoice Staff", email: "staff@sameeja.test", role: "staff", is_active: true, created_at: "2026-07-02T00:00:00Z" },
   ];
-  return supabaseRequest("app_users?select=id,display_name,email,role,created_at&order=created_at.asc");
+  const rows = await getDatabase().select().from(appUsers).orderBy(asc(appUsers.createdAt));
+  return rows.map((member) => ({ id: member.id, display_name: member.displayName, email: member.email, role: member.role as "owner" | "staff", is_active: member.isActive, created_at: member.createdAt }));
 }
 
 export function isDemoMode() {
-  return !isSupabaseConfigured();
+  return !isDatabaseConfigured();
+}
+
+function toInvoiceRecord(row: typeof invoices.$inferSelect, items: InvoiceItemRecord[], allocations: { amount_paisa: number }[]): InvoiceRecord {
+  return {
+    id: row.id,
+    invoice_number: row.invoiceNumber,
+    customer_name: row.customerName,
+    customer_city: row.customerCity,
+    supplier_number: row.supplierNumber,
+    store_number: row.storeNumber,
+    store_name: row.storeName,
+    invoice_date: row.invoiceDate,
+    po_number: row.poNumber,
+    goods_receiving_number: row.goodsReceivingNumber,
+    status: row.status as InvoiceRecord["status"],
+    total_paisa: row.totalPaisa,
+    notes: row.notes,
+    created_at: row.createdAt,
+    invoice_items: items,
+    payment_allocations: allocations,
+  };
+}
+
+function toInvoiceItemRecord(row: typeof invoiceItems.$inferSelect): InvoiceItemRecord {
+  return {
+    id: row.id,
+    mgm_code: row.mgmCode,
+    subsys_code: row.subsysCode,
+    article_name: row.articleName,
+    unit: row.unit,
+    quantity_millis: row.quantityMillis,
+    rate_paisa: row.ratePaisa,
+    total_paisa: row.totalPaisa,
+    position: row.position,
+  };
 }

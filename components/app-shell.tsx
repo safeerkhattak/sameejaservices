@@ -78,7 +78,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-bold">{initials || "SC"}</span>
               <span className="min-w-0"><span className="block truncate text-sm font-semibold">{user.displayName}</span><span className="block text-xs capitalize text-slate-400">{user.role}</span></span>
             </div>
-            <a href="/signout-with-chatgpt?return_to=%2F" target="_top" className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3 text-xs font-medium text-slate-300 hover:text-white"><LogOut className="h-3.5 w-3.5" />Sign out</a>
+            <form action="/auth/signout" method="post" className="mt-3 border-t border-white/10 pt-3"><button type="submit" className="flex w-full items-center gap-2 text-xs font-medium text-slate-300 hover:text-white"><LogOut className="h-3.5 w-3.5" />Sign out</button></form>
           </div>
         </SidebarFooter>
       </Sidebar>

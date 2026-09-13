@@ -1,14 +1,14 @@
 import { notFound, redirect } from "next/navigation";
 import { InvoiceForm, type InvoiceFormValues } from "@/components/invoice-form";
 import { PageHeading } from "@/components/page-heading";
-import { getCurrentMember } from "@/lib/authz";
+import { requireMember } from "@/lib/authz";
 import { getInvoice, isDemoMode } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [member, invoice] = await Promise.all([getCurrentMember("/invoices/" + id + "/edit"), getInvoice(id)]);
+  const [member, invoice] = await Promise.all([requireMember("/invoices/" + id + "/edit"), getInvoice(id)]);
   if (!invoice) notFound();
   if (member.role !== "owner") redirect("/invoices/" + id);
   const initialValues: InvoiceFormValues = {

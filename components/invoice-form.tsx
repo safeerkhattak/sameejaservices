@@ -170,20 +170,20 @@ export function InvoiceForm({
                       <Select value={item.articleName || undefined} onValueChange={(name) => {
                         const product = catalog.find((entry) => entry.article === name);
                         if (!product) return;
-                        form.setValue("items." + index + ".articleName" as const, product.article);
-                        form.setValue("items." + index + ".mgmCode" as const, product.mgm);
-                        form.setValue("items." + index + ".subsysCode" as const, product.subsys);
-                        form.setValue("items." + index + ".unit" as const, product.unit);
-                        if (!item.rate && product.rate) form.setValue("items." + index + ".rate" as const, product.rate);
+                        form.setValue(`items.${index}.articleName`, product.article);
+                        form.setValue(`items.${index}.mgmCode`, product.mgm);
+                        form.setValue(`items.${index}.subsysCode`, product.subsys);
+                        form.setValue(`items.${index}.unit`, product.unit);
+                        if (!item.rate && product.rate) form.setValue(`items.${index}.rate`, product.rate);
                       }}>
                         <SelectTrigger className="h-11 w-full min-w-[230px] rounded-xl"><SelectValue placeholder="Select article" /></SelectTrigger>
                         <SelectContent>{catalog.map((product) => <SelectItem key={product.mgm} value={product.article}>{product.article}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell className="py-4"><Input {...form.register("items." + index + ".mgmCode" as const)} readOnly className="h-11 rounded-xl bg-slate-50" /></TableCell>
-                    <TableCell className="py-4"><Input {...form.register("items." + index + ".subsysCode" as const)} readOnly className="h-11 rounded-xl bg-slate-50" /></TableCell>
-                    <TableCell className="py-4"><div className="relative"><Input inputMode="decimal" {...form.register("items." + index + ".quantity" as const)} placeholder="0.000" className="h-11 rounded-xl pr-10 text-right tabular-nums" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">Kg</span></div></TableCell>
-                    <TableCell className="py-4"><Input inputMode="decimal" {...form.register("items." + index + ".rate" as const)} placeholder="0" className="h-11 rounded-xl text-right tabular-nums" /></TableCell>
+                    <TableCell className="py-4"><Input {...form.register(`items.${index}.mgmCode`)} readOnly className="h-11 rounded-xl bg-slate-50" /></TableCell>
+                    <TableCell className="py-4"><Input {...form.register(`items.${index}.subsysCode`)} readOnly className="h-11 rounded-xl bg-slate-50" /></TableCell>
+                    <TableCell className="py-4"><div className="relative"><Input inputMode="decimal" {...form.register(`items.${index}.quantity`)} placeholder="0.000" className="h-11 rounded-xl pr-10 text-right tabular-nums" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">Kg</span></div></TableCell>
+                    <TableCell className="py-4"><Input inputMode="decimal" {...form.register(`items.${index}.rate`)} placeholder="0" className="h-11 rounded-xl text-right tabular-nums" /></TableCell>
                     <TableCell className="py-4 text-right"><span className="inline-flex h-11 items-center font-bold tabular-nums text-[#102a43]">{formatPkr(linePaisa)}</span></TableCell>
                     <TableCell className="py-4 pr-4"><Button type="button" variant="ghost" size="icon" className="mt-0.5 text-slate-400 hover:text-rose-600" disabled={fields.length === 1} onClick={() => remove(index)} aria-label="Remove article"><Trash2 /></Button></TableCell>
                   </TableRow>

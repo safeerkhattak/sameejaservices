@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, Banknote, CircleDollarSign, ClipboardList, FilePlus2, ReceiptText } from "lucide-react";
-import { getCurrentMember } from "@/lib/authz";
+import { requireMember } from "@/lib/authz";
 import { effectiveStatus, getInvoices, getPayments, isDemoMode, paidAmount } from "@/lib/data";
 import { formatPkr } from "@/lib/money";
 import { PageHeading } from "@/components/page-heading";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const [member, invoices, payments] = await Promise.all([
-    getCurrentMember("/"),
+    requireMember("/"),
     getInvoices(),
     getPayments(),
   ]);

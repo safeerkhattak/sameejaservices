@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getCurrentMember } from "@/lib/authz";
+import { requireMember } from "@/lib/authz";
 import { effectiveStatus, getInvoice, isDemoMode, paidAmount } from "@/lib/data";
 import { formatKg, formatPkr } from "@/lib/money";
 import { InvoiceActions } from "@/components/invoice-actions";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [member, invoice] = await Promise.all([getCurrentMember("/invoices/" + id), getInvoice(id)]);
+  const [member, invoice] = await Promise.all([requireMember("/invoices/" + id), getInvoice(id)]);
   if (!invoice) notFound();
   const received = paidAmount(invoice);
   const balance = invoice.status === "cancelled" ? 0 : Math.max(0, invoice.total_paisa - received);
