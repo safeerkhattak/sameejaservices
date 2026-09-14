@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { ArrowLeft, CheckCircle2, FileText, LockKeyhole, PackageOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Loader2, LockKeyhole, PackageOpen, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -221,8 +221,8 @@ export function InvoiceForm({
           <p className="mt-4 text-3xl font-bold tracking-[-0.04em]">{formatPkr(totalPaisa)}</p>
           <p className="mt-1 text-sm text-slate-300">{items.filter((item) => Number(item.quantity) > 0 && Number(item.rate) > 0).length} completed articles</p>
           {mode === "create" && <div className="mt-6 flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#f5b942]" /><p className="text-xs leading-5 text-slate-300">After submission, staff cannot edit this draft. The owner can review and make changes.</p></div>}
-          <Button type="submit" disabled={submitting || demoMode || products.length === 0} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">
-            <CheckCircle2 />{submitting ? "Saving…" : demoMode ? "Connect Supabase to save" : mode === "edit" ? "Update invoice" : "Submit draft"}
+          <Button type="submit" disabled={submitting || demoMode || products.length === 0} aria-busy={submitting} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">
+            {submitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{submitting ? (mode === "edit" ? "Updating invoice…" : "Submitting draft…") : demoMode ? "Connect Supabase to save" : mode === "edit" ? "Update invoice" : "Submit draft"}
           </Button>
         </div>
         <Button asChild variant="ghost" className="w-full text-slate-500"><Link href={invoiceId ? "/invoices/" + invoiceId : "/invoices"}><ArrowLeft />Cancel and go back</Link></Button>

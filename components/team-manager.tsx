@@ -42,6 +42,7 @@ export function TeamManager({ members, currentUserId }: { members: TeamMember[];
   const [resetMember, setResetMember] = useState<TeamMember | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<"activate" | "deactivate" | "reset_password" | null>(null);
 
   async function createMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,6 +74,7 @@ export function TeamManager({ members, currentUserId }: { members: TeamMember[];
 
   async function updateMember(member: TeamMember, action: "activate" | "deactivate") {
     setBusyId(member.id);
+    setBusyAction(action);
     try {
       const response = await fetch("/api/team/" + member.id, {
         method: "PATCH",
@@ -87,6 +89,7 @@ export function TeamManager({ members, currentUserId }: { members: TeamMember[];
       toast.error(error instanceof Error ? error.message : "The account could not be updated.");
     } finally {
       setBusyId(null);
+      setBusyAction(null);
     }
   }
 
@@ -95,6 +98,7 @@ export function TeamManager({ members, currentUserId }: { members: TeamMember[];
     if (!resetMember) return;
     const password = String(new FormData(event.currentTarget).get("password") ?? "");
     setBusyId(resetMember.id);
+    setBusyAction("reset_password");
     try {
       const response = await fetch("/api/team/" + resetMember.id, {
         method: "PATCH",
@@ -109,6 +113,7 @@ export function TeamManager({ members, currentUserId }: { members: TeamMember[];
       toast.error(error instanceof Error ? error.message : "The password could not be reset.");
     } finally {
       setBusyId(null);
+      setBusyAction(null);
     }
   }
 
@@ -144,13 +149,13 @@ export function TeamManager({ members, currentUserId }: { members: TeamMember[];
                   <Button variant="outline" className="rounded-xl" onClick={() => setResetMember(member)} disabled={busyId === member.id}><KeyRound />Reset password</Button>
                   {member.isActive ? (
                     <AlertDialog>
-                      <AlertDialogTrigger asChild><Button variant="outline" className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50" disabled={busyId === member.id}><UserX />Disable</Button></AlertDialogTrigger>
+                      <AlertDialogTrigger asChild><Button variant="outline" className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50" disabled={busyId === member.id} aria-busy={busyId === member.id && busyAction === "deactivate"}>{busyId === member.id && busyAction === "deactivate" ? <Loader2 className="animate-spin" /> : <UserX />}{busyId === member.id && busyAction === "deactivate" ? "Disabling…" : "Disable"}</Button></AlertDialogTrigger>
                       <AlertDialogContent className="rounded-2xl">
                         <AlertDialogHeader><AlertDialogTitle>Disable {member.displayName}?</AlertDialogTitle><AlertDialogDescription>They will no longer be able to sign in or create invoices. Existing invoices and audit history will be preserved.</AlertDialogDescription></AlertDialogHeader>
-                        <AlertDialogFooter><AlertDialogCancel>Keep active</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => updateMember(member, "deactivate")}>Disable account</AlertDialogAction></AlertDialogFooter>
+                        <AlertDialogFooter><AlertDialogCancel disabled={busyId === member.id}>Keep active</AlertDialogCancel><AlertDialogAction variant="destructive" disabled={busyId === member.id} onClick={() => updateMember(member, "deactivate")}>{busyId === member.id && busyAction === "deactivate" ? <Loader2 className="animate-spin" /> : <UserX />}{busyId === member.id && busyAction === "deactivate" ? "Disabling…" : "Disable account"}</AlertDialogAction></AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                  ) : <Button variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => updateMember(member, "activate")} disabled={busyId === member.id}>{busyId === member.id ? <Loader2 className="animate-spin" /> : <UserCheck />}Enable</Button>}
+                  ) : <Button variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => updateMember(member, "activate")} disabled={busyId === member.id} aria-busy={busyId === member.id && busyAction === "activate"}>{busyId === member.id && busyAction === "activate" ? <Loader2 className="animate-spin" /> : <UserCheck />}{busyId === member.id && busyAction === "activate" ? "Enabling…" : "Enable"}</Button>}
                 </div>
               )}
             </article>
@@ -165,7 +170,7 @@ export function TeamManager({ members, currentUserId }: { members: TeamMember[];
             <div><Label htmlFor="staff-name" className="mb-2 block">Full name</Label><Input id="staff-name" name="displayName" required minLength={2} maxLength={80} autoComplete="off" className="h-11 rounded-xl" placeholder="Staff member name" /></div>
             <div><Label htmlFor="staff-email" className="mb-2 block">Email address</Label><Input id="staff-email" name="email" type="email" required maxLength={254} autoComplete="off" className="h-11 rounded-xl" placeholder="staff@company.com" /></div>
             <div><Label htmlFor="staff-password" className="mb-2 block">Temporary password</Label><Input id="staff-password" name="password" type="password" required minLength={8} maxLength={72} autoComplete="new-password" className="h-11 rounded-xl" placeholder="At least 8 characters" /></div>
-            <DialogFooter className="pt-2"><Button type="button" variant="outline" className="rounded-xl" onClick={() => setCreateOpen(false)} disabled={submitting}>Cancel</Button><Button type="submit" className="rounded-xl bg-[#2b7a78] hover:bg-[#246b69]" disabled={submitting}>{submitting ? <Loader2 className="animate-spin" /> : <Plus />}{submitting ? "Creating…" : "Create account"}</Button></DialogFooter>
+            <DialogFooter className="pt-2"><Button type="button" variant="outline" className="rounded-xl" onClick={() => setCreateOpen(false)} disabled={submitting}>Cancel</Button><Button type="submit" className="rounded-xl bg-[#2b7a78] hover:bg-[#246b69]" disabled={submitting} aria-busy={submitting}>{submitting ? <Loader2 className="animate-spin" /> : <Plus />}{submitting ? "Creating account…" : "Create account"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -175,7 +180,7 @@ export function TeamManager({ members, currentUserId }: { members: TeamMember[];
           <DialogHeader><DialogTitle>Reset password</DialogTitle><DialogDescription>Set a new temporary password for {resetMember?.displayName}. Share it privately.</DialogDescription></DialogHeader>
           <form onSubmit={resetPassword} className="space-y-4">
             <div><Label htmlFor="reset-password" className="mb-2 block">New temporary password</Label><Input key={resetMember?.id} id="reset-password" name="password" type="password" required minLength={8} maxLength={72} autoComplete="new-password" className="h-11 rounded-xl" placeholder="At least 8 characters" /></div>
-            <DialogFooter><Button type="button" variant="outline" className="rounded-xl" onClick={() => setResetMember(null)} disabled={Boolean(busyId)}>Cancel</Button><Button type="submit" className="rounded-xl bg-[#2b7a78] hover:bg-[#246b69]" disabled={Boolean(busyId)}>{busyId ? <Loader2 className="animate-spin" /> : <KeyRound />}{busyId ? "Updating…" : "Update password"}</Button></DialogFooter>
+            <DialogFooter><Button type="button" variant="outline" className="rounded-xl" onClick={() => setResetMember(null)} disabled={Boolean(busyId)}>Cancel</Button><Button type="submit" className="rounded-xl bg-[#2b7a78] hover:bg-[#246b69]" disabled={Boolean(busyId)} aria-busy={busyAction === "reset_password"}>{busyAction === "reset_password" ? <Loader2 className="animate-spin" /> : <KeyRound />}{busyAction === "reset_password" ? "Updating password…" : "Update password"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

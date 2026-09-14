@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
-import { AlertCircle, Banknote, CheckCircle2, LockKeyhole } from "lucide-react";
+import { AlertCircle, Banknote, CheckCircle2, Loader2, LockKeyhole } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -140,7 +140,7 @@ export function PaymentForm({ invoices, demoMode }: { invoices: OpenInvoice[]; d
           <dl className="mt-5 space-y-4"><AmountRow label="Payment received" value={paymentPaisa} /><AmountRow label="Allocated" value={allocatedPaisa} /><div className="border-t border-white/10 pt-4"><AmountRow label={remainingPaisa < 0 ? "Over-allocated" : "Left to allocate"} value={Math.abs(remainingPaisa)} highlight={remainingPaisa !== 0} /></div></dl>
           <div className="mt-6 flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#f5b942]" /><p className="text-xs leading-5 text-slate-300">Nothing is allocated automatically. Your chosen invoices and amounts are saved exactly as entered.</p></div>
           {remainingPaisa !== 0 && paymentPaisa > 0 && <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-400/10 p-3 text-xs text-amber-200"><AlertCircle className="h-4 w-4 shrink-0" />The full payment must be allocated before saving.</div>}
-          <Button type="submit" disabled={!canSubmit || submitting || demoMode} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60"><CheckCircle2 />{submitting ? "Saving…" : demoMode ? "Connect Supabase to save" : "Record payment"}</Button>
+          <Button type="submit" disabled={!canSubmit || submitting || demoMode} aria-busy={submitting} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">{submitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{submitting ? "Recording payment…" : demoMode ? "Connect Supabase to save" : "Record payment"}</Button>
         </div>
       </aside>
     </form>
