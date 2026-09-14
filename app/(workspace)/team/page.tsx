@@ -6,8 +6,7 @@ import { getTeam } from "@/lib/data";
 export const dynamic = "force-dynamic";
 
 export default async function TeamPage() {
-  const owner = await requireOwner("/team");
-  const members = await getTeam();
+  const [owner, members] = await Promise.all([requireOwner("/team"), getTeam()]);
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">

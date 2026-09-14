@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
 import { appUsers, invoiceItems, invoices, paymentAllocations, payments, products } from "@/lib/db/schema";
 import { isDemoModeEnabled } from "@/lib/demo";
@@ -107,27 +107,36 @@ export function effectiveStatus(invoice: InvoiceRecord) {
 export async function getInvoices(): Promise<InvoiceRecord[]> {
   if (!isDatabaseConfigured()) return isDemoModeEnabled() ? demoInvoices : [];
   const database = getDatabase();
-  const invoiceRows = await database.select().from(invoices).orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt)).limit(200);
-  const ids = invoiceRows.map((invoice) => invoice.id);
-  const allocationRows = ids.length
-    ? await database.select({ invoiceId: paymentAllocations.invoiceId, amountPaisa: paymentAllocations.amountPaisa }).from(paymentAllocations).where(inArray(paymentAllocations.invoiceId, ids))
-    : [];
-  const allocations = new Map<string, { amount_paisa: number }[]>();
-  allocationRows.forEach((allocation) => allocations.set(allocation.invoiceId, [...(allocations.get(allocation.invoiceId) ?? []), { amount_paisa: allocation.amountPaisa }]));
-  return invoiceRows.map((invoice) => toInvoiceRecord(invoice, [], allocations.get(invoice.id) ?? []));
+  const rows = await database.select({
+    invoice: invoices,
+    paidPaisa: sql<number>`coalesce(sum(${paymentAllocations.amountPaisa}), 0)`.mapWith(Number),
+  })
+    .from(invoices)
+    .leftJoin(paymentAllocations, eq(paymentAllocations.invoiceId, invoices.id))
+    .groupBy(invoices.id)
+    .orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt))
+    .limit(200);
+  return rows.map(({ invoice, paidPaisa }) => toInvoiceRecord(invoice, [], paidPaisa > 0 ? [{ amount_paisa: paidPaisa }] : []));
 }
 
 export async function getInvoice(id: string): Promise<InvoiceRecord | null> {
   if (!isDatabaseConfigured()) return isDemoModeEnabled() ? demoInvoices.find((invoice) => invoice.id === id) ?? null : null;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return null;
   const database = getDatabase();
-  const rows = await database.select().from(invoices).where(eq(invoices.id, id)).limit(1);
-  if (!rows[0]) return null;
-  const [items, allocations] = await Promise.all([
+  const [rows, items] = await Promise.all([
+    database.select({
+      invoice: invoices,
+      paidPaisa: sql<number>`coalesce(sum(${paymentAllocations.amountPaisa}), 0)`.mapWith(Number),
+    })
+      .from(invoices)
+      .leftJoin(paymentAllocations, eq(paymentAllocations.invoiceId, invoices.id))
+      .where(eq(invoices.id, id))
+      .groupBy(invoices.id)
+      .limit(1),
     database.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id)).orderBy(asc(invoiceItems.position)),
-    database.select({ amountPaisa: paymentAllocations.amountPaisa }).from(paymentAllocations).where(eq(paymentAllocations.invoiceId, id)),
   ]);
-  return toInvoiceRecord(rows[0], items.map(toInvoiceItemRecord), allocations.map((allocation) => ({ amount_paisa: allocation.amountPaisa })));
+  if (!rows[0]) return null;
+  return toInvoiceRecord(rows[0].invoice, items.map(toInvoiceItemRecord), rows[0].paidPaisa > 0 ? [{ amount_paisa: rows[0].paidPaisa }] : []);
 }
 
 export async function getOpenInvoices() {
@@ -138,17 +147,28 @@ export async function getOpenInvoices() {
 export async function getPayments(): Promise<PaymentRecord[]> {
   if (!isDatabaseConfigured()) return isDemoModeEnabled() ? demoPayments : [];
   const database = getDatabase();
-  const paymentRows = await database.select().from(payments).orderBy(desc(payments.paymentDate), desc(payments.createdAt)).limit(100);
-  const ids = paymentRows.map((payment) => payment.id);
-  const allocationRows = ids.length
-    ? await database.select({ paymentId: paymentAllocations.paymentId, amountPaisa: paymentAllocations.amountPaisa, invoiceNumber: invoices.invoiceNumber, storeName: invoices.storeName })
-      .from(paymentAllocations)
-      .innerJoin(invoices, eq(invoices.id, paymentAllocations.invoiceId))
-      .where(inArray(paymentAllocations.paymentId, ids))
-    : [];
-  const allocations = new Map<string, NonNullable<PaymentRecord["payment_allocations"]>>();
-  allocationRows.forEach((allocation) => allocations.set(allocation.paymentId, [...(allocations.get(allocation.paymentId) ?? []), { amount_paisa: allocation.amountPaisa, invoices: { invoice_number: allocation.invoiceNumber, store_name: allocation.storeName } }]));
-  return paymentRows.map((payment) => ({
+  const rows = await database.select({
+    payment: payments,
+    allocations: sql<{ amount_paisa: number; invoice_number: string; store_name: string }[]>`
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'amount_paisa', ${paymentAllocations.amountPaisa},
+            'invoice_number', ${invoices.invoiceNumber},
+            'store_name', ${invoices.storeName}
+          ) order by ${paymentAllocations.createdAt}
+        ) filter (where ${paymentAllocations.id} is not null),
+        '[]'::jsonb
+      )
+    `,
+  })
+    .from(payments)
+    .leftJoin(paymentAllocations, eq(paymentAllocations.paymentId, payments.id))
+    .leftJoin(invoices, eq(invoices.id, paymentAllocations.invoiceId))
+    .groupBy(payments.id)
+    .orderBy(desc(payments.paymentDate), desc(payments.createdAt))
+    .limit(100);
+  return rows.map(({ payment, allocations }) => ({
     id: payment.id,
     customer_name: payment.customerName,
     payment_date: payment.paymentDate,
@@ -156,7 +176,10 @@ export async function getPayments(): Promise<PaymentRecord[]> {
     reference_number: payment.referenceNumber,
     notes: payment.notes,
     created_at: payment.createdAt,
-    payment_allocations: allocations.get(payment.id) ?? [],
+    payment_allocations: allocations.map((allocation) => ({
+      amount_paisa: Number(allocation.amount_paisa),
+      invoices: { invoice_number: allocation.invoice_number, store_name: allocation.store_name },
+    })),
   }));
 }
 

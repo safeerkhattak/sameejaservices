@@ -84,6 +84,15 @@ button:not(:disabled), a[href], [role="button"]:not([aria-disabled="true"]) { cu
 button:disabled { cursor: not-allowed; }
 ::selection { background: #2b7a7833; }
 
+@keyframes navigation-pending {
+  to { opacity: 1; }
+}
+
+.navigation-pending {
+  opacity: 0;
+  animation: navigation-pending 150ms ease 120ms forwards;
+}
+
 .invoice-label {
   font-size: 0.75rem;
   font-weight: 700;

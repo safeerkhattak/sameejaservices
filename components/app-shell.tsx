@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Banknote, FilePlus2, LayoutDashboard, LoaderCircle, LogOut, PackageOpen, ReceiptText, Search, UsersRound } from "lucide-react";
 import {
@@ -68,7 +68,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild isActive={active} size="lg" className="h-11 rounded-xl px-3 text-slate-300 hover:bg-white/8 hover:text-white data-[active=true]:bg-white/12 data-[active=true]:font-semibold data-[active=true]:text-white data-[active=true]:shadow-[inset_3px_0_0_#f5b942]">
-                        <Link href={item.href}><item.icon className="h-[18px] w-[18px]" /><span>{item.label}</span></Link>
+                        <Link href={item.href}><NavLinkContent label={item.label} icon={<item.icon className="h-[18px] w-[18px]" />} /></Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
@@ -113,5 +113,19 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       <Toaster richColors position="top-right" />
       <WebMcpTools />
     </SidebarProvider>
+  );
+}
+
+function NavLinkContent({ label, icon }: { label: string; icon: React.ReactNode }) {
+  const { pending } = useLinkStatus();
+  return (
+    <>
+      {icon}
+      <span>{label}</span>
+      <span className="ml-auto grid h-4 w-4 place-items-center" aria-live="polite">
+        {pending && <LoaderCircle className="navigation-pending h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+        {pending && <span className="sr-only">Loading {label}</span>}
+      </span>
+    </>
   );
 }

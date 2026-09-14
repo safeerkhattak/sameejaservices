@@ -81,3 +81,5 @@ npm run build
 ## Vercel deployment
 
 Import the repository into Vercel, add the same environment variables to the Vercel project, and deploy. Run database migrations before the first production use.
+
+The included `vercel.json` pins server functions to Vercel's Sydney region (`syd1`) so they run close to the Supabase PostgreSQL project in `ap-southeast-2`. Keep those regions aligned if the database is moved later.

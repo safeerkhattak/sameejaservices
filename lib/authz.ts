@@ -24,10 +24,13 @@ const loadCurrentMember = cache(async (): Promise<Member | null> => {
   const displayName = claims.user_metadata?.full_name ?? claims.user_metadata?.name ?? claims.email.split("@")[0];
   const database = getDatabase();
 
+  const existing = await database.select().from(appUsers).where(eq(appUsers.id, claims.sub!)).limit(1);
+  if (existing[0]) return existing[0].isActive ? toMember(existing[0]) : null;
+
   return database.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(23558)`);
-    const existing = await tx.select().from(appUsers).where(eq(appUsers.id, claims.sub!)).limit(1);
-    if (existing[0]) return existing[0].isActive ? toMember(existing[0]) : null;
+    const rechecked = await tx.select().from(appUsers).where(eq(appUsers.id, claims.sub!)).limit(1);
+    if (rechecked[0]) return rechecked[0].isActive ? toMember(rechecked[0]) : null;
 
     const firstUser = (await tx.select({ id: appUsers.id }).from(appUsers).limit(1)).length === 0;
     if (!firstUser) return null;

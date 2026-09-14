@@ -6,8 +6,7 @@ import { getProducts } from "@/lib/data";
 export const dynamic = "force-dynamic";
 
 export default async function ProductsPage() {
-  await requireOwner("/products");
-  const products = await getProducts();
+  const [, products] = await Promise.all([requireOwner("/products"), getProducts()]);
   return (
     <div className="mx-auto w-full max-w-[1280px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
       <PageHeading eyebrow="Invoice setup" title="Products" description="Manage the articles available on invoices. Unit and rate are defaults that can be changed for each delivery; the final invoice values are preserved in its history." />

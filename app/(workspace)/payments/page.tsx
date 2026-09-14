@@ -10,8 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 export const dynamic = "force-dynamic";
 
 export default async function PaymentsPage() {
-  await requireOwner("/payments");
-  const payments = await getPayments();
+  const [, payments] = await Promise.all([requireOwner("/payments"), getPayments()]);
   return (
     <div className="mx-auto w-full max-w-[1480px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
       <PageHeading eyebrow="Payment register" title="Payments" description="Every received payment and its manually selected invoice allocations." actions={<Button asChild className="h-11 rounded-xl bg-[#2b7a78] hover:bg-[#246b69]"><Link href="/payments/new"><Banknote />Record payment</Link></Button>} />
