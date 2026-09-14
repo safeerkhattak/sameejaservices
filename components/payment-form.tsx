@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { formatPkr } from "@/lib/money";
+import { todayForDateInput } from "@/lib/date";
 
 type OpenInvoice = { id: string; invoiceNumber: string; storeName: string; invoiceDate: string; totalPaisa: number; paidPaisa: number; balancePaisa: number; customerName: string };
 type FormValues = { customerName: string; paymentDate: string; amount: string; referenceNumber: string; notes: string };
@@ -32,10 +33,11 @@ export function PaymentForm({ invoices, demoMode }: { invoices: OpenInvoice[]; d
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [isNavigating, startNavigation] = useTransition();
   const form = useForm<FormValues>({
     defaultValues: {
       customerName: customers[0] ?? "Metro Cash & Carry Pakistan (Pvt.) Ltd",
-      paymentDate: new Date().toISOString().slice(0, 10),
+      paymentDate: todayForDateInput(),
       amount: "",
       referenceNumber: "",
       notes: "",
@@ -77,7 +79,7 @@ export function PaymentForm({ invoices, demoMode }: { invoices: OpenInvoice[]; d
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Payment could not be saved.");
       toast.success("Payment recorded and allocated.");
-      router.push("/payments");
+      startNavigation(() => router.push("/payments"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Payment could not be saved.");
     } finally {
@@ -140,7 +142,7 @@ export function PaymentForm({ invoices, demoMode }: { invoices: OpenInvoice[]; d
           <dl className="mt-5 space-y-4"><AmountRow label="Payment received" value={paymentPaisa} /><AmountRow label="Allocated" value={allocatedPaisa} /><div className="border-t border-white/10 pt-4"><AmountRow label={remainingPaisa < 0 ? "Over-allocated" : "Left to allocate"} value={Math.abs(remainingPaisa)} highlight={remainingPaisa !== 0} /></div></dl>
           <div className="mt-6 flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#f5b942]" /><p className="text-xs leading-5 text-slate-300">Nothing is allocated automatically. Your chosen invoices and amounts are saved exactly as entered.</p></div>
           {remainingPaisa !== 0 && paymentPaisa > 0 && <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-400/10 p-3 text-xs text-amber-200"><AlertCircle className="h-4 w-4 shrink-0" />The full payment must be allocated before saving.</div>}
-          <Button type="submit" disabled={!canSubmit || submitting || demoMode} aria-busy={submitting} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">{submitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{submitting ? "Recording payment…" : demoMode ? "Connect Supabase to save" : "Record payment"}</Button>
+          <Button type="submit" disabled={!canSubmit || submitting || isNavigating || demoMode} aria-busy={submitting || isNavigating} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">{submitting || isNavigating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{submitting || isNavigating ? "Recording payment…" : demoMode ? "Connect Supabase to save" : "Record payment"}</Button>
         </div>
       </aside>
     </form>

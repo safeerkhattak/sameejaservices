@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       const invoiceNumber = String(nextNumber).padStart(6, "0");
 
       const productIds = [...new Set(payload.items.map((item) => item.product_id).filter((value): value is string => Boolean(value)))];
-      if (productIds.length !== payload.items.length) throw new Error("Select a product for every invoice line.");
+      if (payload.items.some((item) => !item.product_id)) throw new Error("Select a product for every invoice line.");
       const productRows = await tx.select().from(products).where(inArray(products.id, productIds));
       if (productRows.length !== productIds.length || productRows.some((product) => !product.isActive)) {
         throw new Error("One or more selected products are unavailable. Refresh and try again.");

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link, { useLinkStatus } from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Banknote, FilePlus2, LayoutDashboard, LoaderCircle, LogOut, PackageOpen, ReceiptText, Search, UsersRound } from "lucide-react";
 import {
   Sidebar,
@@ -34,7 +34,9 @@ const items = [
 
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [searching, startSearch] = useTransition();
   const initials = user.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   const activeHref = pathname === "/"
     ? "/"
@@ -97,9 +99,19 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
         <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl sm:px-8 lg:px-10">
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger className="h-9 w-9 rounded-xl border border-slate-200 text-[#102a43] md:hidden" />
-            <form action="/invoices" method="get" className="relative hidden w-[min(34vw,390px)] lg:block">
+            <form
+              action="/invoices"
+              method="get"
+              className="relative hidden w-[min(34vw,390px)] lg:block"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const query = new FormData(event.currentTarget).get("q")?.toString().trim() ?? "";
+                startSearch(() => router.push(query ? `/invoices?q=${encodeURIComponent(query)}` : "/invoices"));
+              }}
+            >
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input name="q" aria-label="Search invoices" className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#2b7a78] focus:bg-white focus:ring-4 focus:ring-[#2b7a78]/10" placeholder="Search invoice or store" />
+              <input name="q" aria-label="Search invoices" className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#2b7a78] focus:bg-white focus:ring-4 focus:ring-[#2b7a78]/10" placeholder="Search invoice or store" />
+              {searching && <LoaderCircle className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-[#2b7a78]" aria-label="Searching invoices" />}
             </form>
             <span className="truncate text-sm font-bold text-[#102a43] lg:hidden">Sameeja Ledger</span>
           </div>

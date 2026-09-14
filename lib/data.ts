@@ -1,4 +1,4 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
 import { appUsers, invoiceItems, invoices, paymentAllocations, payments, products } from "@/lib/db/schema";
 import { isDemoModeEnabled } from "@/lib/demo";
@@ -58,6 +58,27 @@ export type PaymentRecord = {
   payment_allocations?: { amount_paisa: number; invoices?: { invoice_number: string; store_name: string } }[];
 };
 
+export type DashboardData = {
+  total_invoiced_paisa: number;
+  total_received_paisa: number;
+  outstanding_paisa: number;
+  issued_count: number;
+  outstanding_count: number;
+  awaiting_review_count: number;
+  paid_count: number;
+  partially_paid_count: number;
+  unpaid_count: number;
+  attention: InvoiceRecord[];
+};
+
+export type PaginatedResult<T> = {
+  records: T[];
+  page: number;
+  page_size: number;
+  total_records: number;
+  total_pages: number;
+};
+
 const demoInvoices: InvoiceRecord[] = [
   {
     id: "demo-172",
@@ -104,19 +125,141 @@ export function effectiveStatus(invoice: InvoiceRecord) {
   return "unpaid" as const;
 }
 
-export async function getInvoices(): Promise<InvoiceRecord[]> {
-  if (!isDatabaseConfigured()) return isDemoModeEnabled() ? demoInvoices : [];
+function invoiceAllocationTotals(database: ReturnType<typeof getDatabase>) {
+  return database
+    .select({
+      invoiceId: paymentAllocations.invoiceId,
+      paidPaisa: sql<number>`sum(${paymentAllocations.amountPaisa})`.mapWith(Number).as("paid_paisa"),
+    })
+    .from(paymentAllocations)
+    .groupBy(paymentAllocations.invoiceId)
+    .as("invoice_allocation_totals");
+}
+
+function demoDashboardData(): DashboardData {
+  const issued = demoInvoices.filter((invoice) => invoice.status === "issued");
+  const totalInvoiced = issued.reduce((sum, invoice) => sum + invoice.total_paisa, 0);
+  const totalReceived = demoPayments.reduce((sum, payment) => sum + payment.amount_paisa, 0);
+  const attention = demoInvoices
+    .filter((invoice) => invoice.status === "pending_review" || (invoice.status === "issued" && paidAmount(invoice) < invoice.total_paisa))
+    .slice(0, 6);
+
+  return {
+    total_invoiced_paisa: totalInvoiced,
+    total_received_paisa: totalReceived,
+    outstanding_paisa: issued.reduce((sum, invoice) => sum + Math.max(0, invoice.total_paisa - paidAmount(invoice)), 0),
+    issued_count: issued.length,
+    outstanding_count: issued.filter((invoice) => paidAmount(invoice) < invoice.total_paisa).length,
+    awaiting_review_count: demoInvoices.filter((invoice) => invoice.status === "pending_review").length,
+    paid_count: issued.filter((invoice) => effectiveStatus(invoice) === "paid").length,
+    partially_paid_count: issued.filter((invoice) => effectiveStatus(invoice) === "partially_paid").length,
+    unpaid_count: issued.filter((invoice) => effectiveStatus(invoice) === "unpaid").length,
+    attention,
+  };
+}
+
+export async function getDashboardData(): Promise<DashboardData> {
+  if (!isDatabaseConfigured()) {
+    return isDemoModeEnabled() ? demoDashboardData() : {
+      total_invoiced_paisa: 0,
+      total_received_paisa: 0,
+      outstanding_paisa: 0,
+      issued_count: 0,
+      outstanding_count: 0,
+      awaiting_review_count: 0,
+      paid_count: 0,
+      partially_paid_count: 0,
+      unpaid_count: 0,
+      attention: [],
+    };
+  }
+
   const database = getDatabase();
-  const rows = await database.select({
-    invoice: invoices,
-    paidPaisa: sql<number>`coalesce(sum(${paymentAllocations.amountPaisa}), 0)`.mapWith(Number),
-  })
+  const allocationTotals = invoiceAllocationTotals(database);
+  const paid = sql`coalesce(${allocationTotals.paidPaisa}, 0)`;
+  const [metricRows, attentionRows] = await Promise.all([
+    database
+      .select({
+        totalInvoicedPaisa: sql<number>`coalesce(sum(${invoices.totalPaisa}) filter (where ${invoices.status} = 'issued'), 0)`.mapWith(Number),
+        totalReceivedPaisa: sql<number>`(select coalesce(sum(${payments.amountPaisa}), 0) from ${payments})`.mapWith(Number),
+        outstandingPaisa: sql<number>`coalesce(sum(greatest(${invoices.totalPaisa} - ${paid}, 0)) filter (where ${invoices.status} = 'issued'), 0)`.mapWith(Number),
+        issuedCount: sql<number>`count(*) filter (where ${invoices.status} = 'issued')`.mapWith(Number),
+        outstandingCount: sql<number>`count(*) filter (where ${invoices.status} = 'issued' and ${paid} < ${invoices.totalPaisa})`.mapWith(Number),
+        awaitingReviewCount: sql<number>`count(*) filter (where ${invoices.status} = 'pending_review')`.mapWith(Number),
+        paidCount: sql<number>`count(*) filter (where ${invoices.status} = 'issued' and ${paid} >= ${invoices.totalPaisa})`.mapWith(Number),
+        partiallyPaidCount: sql<number>`count(*) filter (where ${invoices.status} = 'issued' and ${paid} > 0 and ${paid} < ${invoices.totalPaisa})`.mapWith(Number),
+        unpaidCount: sql<number>`count(*) filter (where ${invoices.status} = 'issued' and ${paid} = 0)`.mapWith(Number),
+      })
+      .from(invoices)
+      .leftJoin(allocationTotals, eq(allocationTotals.invoiceId, invoices.id)),
+    database
+      .select({ invoice: invoices, paidPaisa: sql<number>`${paid}`.mapWith(Number) })
+      .from(invoices)
+      .leftJoin(allocationTotals, eq(allocationTotals.invoiceId, invoices.id))
+      .where(sql`${invoices.status} = 'pending_review' or (${invoices.status} = 'issued' and ${paid} < ${invoices.totalPaisa})`)
+      .orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt))
+      .limit(6),
+  ]);
+
+  const metrics = metricRows[0];
+  return {
+    total_invoiced_paisa: metrics.totalInvoicedPaisa,
+    total_received_paisa: metrics.totalReceivedPaisa,
+    outstanding_paisa: metrics.outstandingPaisa,
+    issued_count: metrics.issuedCount,
+    outstanding_count: metrics.outstandingCount,
+    awaiting_review_count: metrics.awaitingReviewCount,
+    paid_count: metrics.paidCount,
+    partially_paid_count: metrics.partiallyPaidCount,
+    unpaid_count: metrics.unpaidCount,
+    attention: attentionRows.map(({ invoice, paidPaisa }) => toInvoiceRecord(invoice, [], paidPaisa > 0 ? [{ amount_paisa: paidPaisa }] : [])),
+  };
+}
+
+export async function getInvoicePage(options: { query?: string; page?: number; pageSize?: number } = {}): Promise<PaginatedResult<InvoiceRecord>> {
+  const page = Math.max(1, Math.floor(options.page ?? 1));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize ?? 50)));
+  const query = options.query?.trim().slice(0, 100) ?? "";
+
+  if (!isDatabaseConfigured()) {
+    const filtered = query
+      ? demoInvoices.filter((invoice) => [invoice.invoice_number, invoice.store_name, invoice.po_number, invoice.goods_receiving_number].some((value) => value.toLowerCase().includes(query.toLowerCase())))
+      : demoInvoices;
+    return paginateRecords(filtered, page, pageSize);
+  }
+
+  const database = getDatabase();
+  const allocationTotals = invoiceAllocationTotals(database);
+  const pattern = `%${query}%`;
+  const filter = query
+    ? or(
+        ilike(invoices.invoiceNumber, pattern),
+        ilike(invoices.storeName, pattern),
+        ilike(invoices.poNumber, pattern),
+        ilike(invoices.goodsReceivingNumber, pattern),
+      )
+    : undefined;
+  const rows = await database
+    .select({
+      invoice: invoices,
+      paidPaisa: sql<number>`coalesce(${allocationTotals.paidPaisa}, 0)`.mapWith(Number),
+      totalCount: sql<number>`count(*) over()`.mapWith(Number),
+    })
     .from(invoices)
-    .leftJoin(paymentAllocations, eq(paymentAllocations.invoiceId, invoices.id))
-    .groupBy(invoices.id)
+    .leftJoin(allocationTotals, eq(allocationTotals.invoiceId, invoices.id))
+    .where(filter)
     .orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt))
-    .limit(200);
-  return rows.map(({ invoice, paidPaisa }) => toInvoiceRecord(invoice, [], paidPaisa > 0 ? [{ amount_paisa: paidPaisa }] : []));
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+  const totalRecords = rows[0]?.totalCount ?? 0;
+
+  return {
+    records: rows.map(({ invoice, paidPaisa }) => toInvoiceRecord(invoice, [], paidPaisa > 0 ? [{ amount_paisa: paidPaisa }] : [])),
+    page,
+    page_size: pageSize,
+    total_records: totalRecords,
+    total_pages: Math.max(1, Math.ceil(totalRecords / pageSize)),
+  };
 }
 
 export async function getInvoice(id: string): Promise<InvoiceRecord | null> {
@@ -140,47 +283,58 @@ export async function getInvoice(id: string): Promise<InvoiceRecord | null> {
 }
 
 export async function getOpenInvoices() {
-  const invoices = await getInvoices();
-  return invoices.filter((invoice) => invoice.status === "issued" && paidAmount(invoice) < invoice.total_paisa);
+  if (!isDatabaseConfigured()) {
+    return isDemoModeEnabled() ? demoInvoices.filter((invoice) => invoice.status === "issued" && paidAmount(invoice) < invoice.total_paisa) : [];
+  }
+  const database = getDatabase();
+  const allocationTotals = invoiceAllocationTotals(database);
+  const rows = await database
+    .select({ invoice: invoices, paidPaisa: sql<number>`coalesce(${allocationTotals.paidPaisa}, 0)`.mapWith(Number) })
+    .from(invoices)
+    .leftJoin(allocationTotals, eq(allocationTotals.invoiceId, invoices.id))
+    .where(and(eq(invoices.status, "issued"), sql`coalesce(${allocationTotals.paidPaisa}, 0) < ${invoices.totalPaisa}`))
+    .orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt));
+  return rows.map(({ invoice, paidPaisa }) => toInvoiceRecord(invoice, [], paidPaisa > 0 ? [{ amount_paisa: paidPaisa }] : []));
 }
 
-export async function getPayments(): Promise<PaymentRecord[]> {
-  if (!isDatabaseConfigured()) return isDemoModeEnabled() ? demoPayments : [];
+export async function getPaymentPage(options: { page?: number; pageSize?: number } = {}): Promise<PaginatedResult<PaymentRecord>> {
+  const page = Math.max(1, Math.floor(options.page ?? 1));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize ?? 50)));
+  if (!isDatabaseConfigured()) return paginateRecords(isDemoModeEnabled() ? demoPayments : [], page, pageSize);
+
   const database = getDatabase();
   const rows = await database.select({
-    payment: payments,
-    allocations: sql<{ amount_paisa: number; invoice_number: string; store_name: string }[]>`
-      coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'amount_paisa', ${paymentAllocations.amountPaisa},
-            'invoice_number', ${invoices.invoiceNumber},
-            'store_name', ${invoices.storeName}
-          ) order by ${paymentAllocations.createdAt}
-        ) filter (where ${paymentAllocations.id} is not null),
-        '[]'::jsonb
-      )
-    `,
-  })
-    .from(payments)
-    .leftJoin(paymentAllocations, eq(paymentAllocations.paymentId, payments.id))
-    .leftJoin(invoices, eq(invoices.id, paymentAllocations.invoiceId))
-    .groupBy(payments.id)
-    .orderBy(desc(payments.paymentDate), desc(payments.createdAt))
-    .limit(100);
-  return rows.map(({ payment, allocations }) => ({
-    id: payment.id,
-    customer_name: payment.customerName,
-    payment_date: payment.paymentDate,
-    amount_paisa: payment.amountPaisa,
-    reference_number: payment.referenceNumber,
-    notes: payment.notes,
-    created_at: payment.createdAt,
-    payment_allocations: allocations.map((allocation) => ({
-      amount_paisa: Number(allocation.amount_paisa),
-      invoices: { invoice_number: allocation.invoice_number, store_name: allocation.store_name },
-    })),
-  }));
+      payment: payments,
+      totalCount: sql<number>`count(*) over()`.mapWith(Number),
+      allocations: sql<{ amount_paisa: number; invoice_number: string; store_name: string }[]>`
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'amount_paisa', ${paymentAllocations.amountPaisa},
+              'invoice_number', ${invoices.invoiceNumber},
+              'store_name', ${invoices.storeName}
+            ) order by ${paymentAllocations.createdAt}
+          ) filter (where ${paymentAllocations.id} is not null),
+          '[]'::jsonb
+        )
+      `,
+    })
+      .from(payments)
+      .leftJoin(paymentAllocations, eq(paymentAllocations.paymentId, payments.id))
+      .leftJoin(invoices, eq(invoices.id, paymentAllocations.invoiceId))
+      .groupBy(payments.id)
+      .orderBy(desc(payments.paymentDate), desc(payments.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+  const totalRecords = rows[0]?.totalCount ?? 0;
+
+  return {
+    records: rows.map(({ payment, allocations }) => toPaymentRecord(payment, allocations)),
+    page,
+    page_size: pageSize,
+    total_records: totalRecords,
+    total_pages: Math.max(1, Math.ceil(totalRecords / pageSize)),
+  };
 }
 
 export async function getTeam(): Promise<{ id: string; display_name: string; email: string; role: "owner" | "staff"; is_active: boolean; created_at: string }[]> {
@@ -194,10 +348,12 @@ export async function getTeam(): Promise<{ id: string; display_name: string; ema
 
 export async function getProducts(options: { activeOnly?: boolean } = {}): Promise<ProductRecord[]> {
   if (!isDatabaseConfigured()) return [];
-  const rows = await getDatabase().select().from(products).orderBy(asc(products.articleName));
-  return rows
-    .filter((product) => !options.activeOnly || product.isActive)
-    .map((product) => ({
+  const rows = await getDatabase()
+    .select()
+    .from(products)
+    .where(options.activeOnly ? eq(products.isActive, true) : undefined)
+    .orderBy(asc(products.articleName));
+  return rows.map((product) => ({
       id: product.id,
       mgm_code: product.mgmCode,
       subsys_code: product.subsysCode,
@@ -247,5 +403,35 @@ function toInvoiceItemRecord(row: typeof invoiceItems.$inferSelect): InvoiceItem
     rate_paisa: row.ratePaisa,
     total_paisa: row.totalPaisa,
     position: row.position,
+  };
+}
+
+function toPaymentRecord(
+  payment: typeof payments.$inferSelect,
+  allocations: { amount_paisa: number; invoice_number: string; store_name: string }[],
+): PaymentRecord {
+  return {
+    id: payment.id,
+    customer_name: payment.customerName,
+    payment_date: payment.paymentDate,
+    amount_paisa: payment.amountPaisa,
+    reference_number: payment.referenceNumber,
+    notes: payment.notes,
+    created_at: payment.createdAt,
+    payment_allocations: allocations.map((allocation) => ({
+      amount_paisa: Number(allocation.amount_paisa),
+      invoices: { invoice_number: allocation.invoice_number, store_name: allocation.store_name },
+    })),
+  };
+}
+
+function paginateRecords<T>(records: T[], page: number, pageSize: number): PaginatedResult<T> {
+  const totalRecords = records.length;
+  return {
+    records: records.slice((page - 1) * pageSize, page * pageSize),
+    page,
+    page_size: pageSize,
+    total_records: totalRecords,
+    total_pages: Math.max(1, Math.ceil(totalRecords / pageSize)),
   };
 }

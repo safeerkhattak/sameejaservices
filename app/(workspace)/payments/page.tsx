@@ -1,16 +1,23 @@
 import Link from "next/link";
 import { Banknote } from "lucide-react";
 import { requireOwner } from "@/lib/authz";
-import { getPayments } from "@/lib/data";
+import { getPaymentPage } from "@/lib/data";
 import { formatPkr } from "@/lib/money";
 import { PageHeading } from "@/components/page-heading";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RegisterPagination } from "@/components/register-pagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function PaymentsPage() {
-  const [, payments] = await Promise.all([requireOwner("/payments"), getPayments()]);
+export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const query = await searchParams;
+  const requestedPage = Number.parseInt(query.page ?? "1", 10);
+  const [, paymentPage] = await Promise.all([
+    requireOwner("/payments"),
+    getPaymentPage({ page: Number.isFinite(requestedPage) ? requestedPage : 1 }),
+  ]);
+  const payments = paymentPage.records;
   return (
     <div className="mx-auto w-full max-w-[1480px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
       <PageHeading eyebrow="Payment register" title="Payments" description="Every received payment and its manually selected invoice allocations." actions={<Button asChild className="h-11 rounded-xl bg-[#2b7a78] hover:bg-[#246b69]"><Link href="/payments/new"><Banknote />Record payment</Link></Button>} />
@@ -21,6 +28,13 @@ export default async function PaymentsPage() {
             <TableBody>{payments.map((payment) => <TableRow key={payment.id}><TableCell className="px-6 py-4 font-medium">{formatDate(payment.payment_date)}</TableCell><TableCell>{payment.customer_name}</TableCell><TableCell className="text-slate-600">{payment.reference_number || "—"}</TableCell><TableCell><div className="flex flex-wrap gap-1.5">{(payment.payment_allocations ?? []).map((allocation, index) => <span key={index} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">INV-{allocation.invoices?.invoice_number ?? "—"} · {formatPkr(allocation.amount_paisa)}</span>)}</div></TableCell><TableCell className="pr-6 text-right text-base font-bold tabular-nums text-[#102a43]">{formatPkr(payment.amount_paisa)}</TableCell></TableRow>)}</TableBody>
           </Table>
         )}
+        <RegisterPagination
+          basePath="/payments"
+          page={paymentPage.page}
+          pageSize={paymentPage.page_size}
+          totalPages={paymentPage.total_pages}
+          totalRecords={paymentPage.total_records}
+        />
       </section>
     </div>
   );

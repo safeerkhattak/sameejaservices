@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { ArrowLeft, CheckCircle2, FileText, Loader2, LockKeyhole, PackageOpen, Plus, Trash2 } from "lucide-react";
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { formatPkr } from "@/lib/money";
+import { todayForDateInput } from "@/lib/date";
 
 export type InvoiceProductOption = {
   id: string;
@@ -70,8 +71,9 @@ export function InvoiceForm({
   canManageProducts?: boolean;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [isNavigating, startNavigation] = useTransition();
   const router = useRouter();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayForDateInput();
   const form = useForm<InvoiceFormValues>({
     defaultValues: initialValues ?? {
       customerName: "Metro Cash & Carry Pakistan (Pvt.) Ltd",
@@ -114,7 +116,7 @@ export function InvoiceForm({
       const payload = await response.json() as { id?: string; error?: string };
       if (!response.ok) throw new Error(payload.error || "Invoice could not be saved.");
       toast.success(mode === "edit" ? "Invoice updated." : "Draft submitted for owner review.");
-      router.push("/invoices/" + (payload.id || invoiceId));
+      startNavigation(() => router.push("/invoices/" + (payload.id || invoiceId)));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Invoice could not be saved.");
     } finally {
@@ -221,8 +223,8 @@ export function InvoiceForm({
           <p className="mt-4 text-3xl font-bold tracking-[-0.04em]">{formatPkr(totalPaisa)}</p>
           <p className="mt-1 text-sm text-slate-300">{items.filter((item) => Number(item.quantity) > 0 && Number(item.rate) > 0).length} completed articles</p>
           {mode === "create" && <div className="mt-6 flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#f5b942]" /><p className="text-xs leading-5 text-slate-300">After submission, staff cannot edit this draft. The owner can review and make changes.</p></div>}
-          <Button type="submit" disabled={submitting || demoMode || products.length === 0} aria-busy={submitting} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">
-            {submitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{submitting ? (mode === "edit" ? "Updating invoice…" : "Submitting draft…") : demoMode ? "Connect Supabase to save" : mode === "edit" ? "Update invoice" : "Submit draft"}
+          <Button type="submit" disabled={submitting || isNavigating || demoMode || products.length === 0} aria-busy={submitting || isNavigating} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">
+            {submitting || isNavigating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{submitting || isNavigating ? (mode === "edit" ? "Updating invoice…" : "Submitting draft…") : demoMode ? "Connect Supabase to save" : mode === "edit" ? "Update invoice" : "Submit draft"}
           </Button>
         </div>
         <Button asChild variant="ghost" className="w-full text-slate-500"><Link href={invoiceId ? "/invoices/" + invoiceId : "/invoices"}><ArrowLeft />Cancel and go back</Link></Button>

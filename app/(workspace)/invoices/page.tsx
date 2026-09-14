@@ -1,26 +1,31 @@
 import Link from "next/link";
 import { ArrowUpRight, FilePlus2 } from "lucide-react";
-import { getInvoices, effectiveStatus, paidAmount } from "@/lib/data";
+import { getInvoicePage, effectiveStatus, paidAmount } from "@/lib/data";
 import { formatPkr } from "@/lib/money";
 import { PageHeading } from "@/components/page-heading";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RegisterPagination } from "@/components/register-pagination";
+import { requireMember } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
-export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const [allInvoices, query] = await Promise.all([getInvoices(), searchParams]);
-  const q = query.q?.trim().toLowerCase() ?? "";
-  const invoices = q
-    ? allInvoices.filter((invoice) => [invoice.invoice_number, invoice.store_name, invoice.po_number, invoice.goods_receiving_number].some((value) => value.toLowerCase().includes(q)))
-    : allInvoices;
+export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
+  const query = await searchParams;
+  const q = query.q?.trim() ?? "";
+  const requestedPage = Number.parseInt(query.page ?? "1", 10);
+  const [, invoicePage] = await Promise.all([
+    requireMember("/invoices"),
+    getInvoicePage({ query: q, page: Number.isFinite(requestedPage) ? requestedPage : 1 }),
+  ]);
+  const invoices = invoicePage.records;
   return (
     <div className="mx-auto w-full max-w-[1480px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
       <PageHeading
         eyebrow="Invoice register"
         title="Invoices"
-        description={q ? "Search results for “" + query.q + "”" : "See every submitted draft, issued invoice and remaining balance."}
+        description={q ? "Search results for “" + q + "”" : "See every submitted draft, issued invoice and remaining balance."}
         actions={<Button asChild className="h-11 rounded-xl bg-[#2b7a78] px-4 font-semibold text-white hover:bg-[#246b69]"><Link href="/invoices/new"><FilePlus2 />New invoice</Link></Button>}
       />
       <section className="mt-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,35,55,.04)]">
@@ -57,6 +62,14 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             </TableBody>
           </Table>
         )}
+        <RegisterPagination
+          basePath="/invoices"
+          page={invoicePage.page}
+          pageSize={invoicePage.page_size}
+          totalPages={invoicePage.total_pages}
+          totalRecords={invoicePage.total_records}
+          query={q}
+        />
       </section>
     </div>
   );

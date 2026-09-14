@@ -57,7 +57,7 @@ export async function requireMember(returnTo = "/") {
 
 export async function requireOwner(returnTo = "/") {
   const member = await requireMember(returnTo);
-  if (member.role !== "owner") throw new Error("Owner access is required for this action.");
+  if (member.role !== "owner") redirect("/");
   return member;
 }
 

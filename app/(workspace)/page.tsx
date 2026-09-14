@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight, Banknote, CircleDollarSign, ClipboardList, FilePlus2, ReceiptText } from "lucide-react";
 import { requireMember } from "@/lib/authz";
-import { effectiveStatus, getInvoices, getPayments, isDemoMode, paidAmount } from "@/lib/data";
+import { effectiveStatus, getDashboardData, isDemoMode, paidAmount } from "@/lib/data";
 import { formatPkr } from "@/lib/money";
 import { PageHeading } from "@/components/page-heading";
 import { StatusBadge } from "@/components/status-badge";
@@ -12,23 +12,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [member, invoices, payments] = await Promise.all([
+  const [member, dashboard] = await Promise.all([
     requireMember("/"),
-    getInvoices(),
-    getPayments(),
+    getDashboardData(),
   ]);
-  const issued = invoices.filter((invoice) => invoice.status === "issued");
-  const totalInvoiced = issued.reduce((sum, invoice) => sum + Number(invoice.total_paisa), 0);
-  const totalReceived = payments.reduce((sum, payment) => sum + Number(payment.amount_paisa), 0);
-  const outstanding = issued.reduce(
-    (sum, invoice) => sum + Math.max(0, Number(invoice.total_paisa) - paidAmount(invoice)),
-    0,
-  );
-  const awaitingReview = invoices.filter((invoice) => invoice.status === "pending_review").length;
-  const collectionPercent = totalInvoiced > 0 ? Math.min(100, (totalReceived / totalInvoiced) * 100) : 0;
-  const attention = invoices
-    .filter((invoice) => invoice.status === "pending_review" || (invoice.status === "issued" && paidAmount(invoice) < invoice.total_paisa))
-    .slice(0, 6);
+  const collectionPercent = dashboard.total_invoiced_paisa > 0
+    ? Math.min(100, (dashboard.total_received_paisa / dashboard.total_invoiced_paisa) * 100)
+    : 0;
   const today = new Intl.DateTimeFormat("en-PK", {
     weekday: "long",
     day: "2-digit",
@@ -64,12 +54,12 @@ export default async function DashboardPage() {
       <section className={"mt-8 grid gap-4 sm:grid-cols-2 " + (member.role === "owner" ? "xl:grid-cols-4" : "xl:grid-cols-2")} aria-label="Account summary">
         {member.role === "owner" && (
           <>
-            <MetricCard label="Outstanding" value={formatPkr(outstanding)} hint={"Across " + issued.filter((invoice) => paidAmount(invoice) < invoice.total_paisa).length + " invoices"} icon={CircleDollarSign} accent />
-            <MetricCard label="Total invoiced" value={formatPkr(totalInvoiced)} hint={issued.length + " issued invoices"} icon={ReceiptText} />
-            <MetricCard label="Payments received" value={formatPkr(totalReceived)} hint={collectionPercent.toFixed(1) + "% collected"} icon={Banknote} />
+            <MetricCard label="Outstanding" value={formatPkr(dashboard.outstanding_paisa)} hint={"Across " + dashboard.outstanding_count + " invoices"} icon={CircleDollarSign} accent />
+            <MetricCard label="Total invoiced" value={formatPkr(dashboard.total_invoiced_paisa)} hint={dashboard.issued_count + " issued invoices"} icon={ReceiptText} />
+            <MetricCard label="Payments received" value={formatPkr(dashboard.total_received_paisa)} hint={collectionPercent.toFixed(1) + "% collected"} icon={Banknote} />
           </>
         )}
-        <MetricCard label="Awaiting review" value={String(awaitingReview)} hint="Submitted drafts" icon={ClipboardList} />
+        <MetricCard label="Awaiting review" value={String(dashboard.awaiting_review_count)} hint="Submitted drafts" icon={ClipboardList} />
       </section>
 
       <div className={"mt-6 grid gap-6 " + (member.role === "owner" ? "xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.75fr)]" : "")}>
@@ -83,7 +73,7 @@ export default async function DashboardPage() {
               <Link href="/invoices">View all<ArrowUpRight /></Link>
             </Button>
           </div>
-          {attention.length === 0 ? (
+          {dashboard.attention.length === 0 ? (
             <div className="px-6 py-14 text-center">
               <p className="font-semibold text-[#102a43]">Nothing needs attention</p>
               <p className="mt-1 text-sm text-slate-500">New drafts and unpaid invoices will appear here.</p>
@@ -101,7 +91,7 @@ export default async function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {attention.map((invoice) => {
+                {dashboard.attention.map((invoice) => {
                   const balance = Math.max(0, invoice.total_paisa - paidAmount(invoice));
                   return (
                     <TableRow key={invoice.id} className="hover:bg-[#f8fbfb]">
@@ -135,9 +125,9 @@ export default async function DashboardPage() {
             </div>
             <Progress value={collectionPercent} className="mt-7 h-2 bg-white/10 [&>div]:bg-[#f5b942]" />
             <dl className="mt-7 space-y-4 border-t border-white/10 pt-5">
-              <SummaryRow label="Fully paid" value={issued.filter((invoice) => effectiveStatus(invoice) === "paid").length} />
-              <SummaryRow label="Partially paid" value={issued.filter((invoice) => effectiveStatus(invoice) === "partially_paid").length} highlight />
-              <SummaryRow label="Unpaid" value={issued.filter((invoice) => effectiveStatus(invoice) === "unpaid").length} />
+              <SummaryRow label="Fully paid" value={dashboard.paid_count} />
+              <SummaryRow label="Partially paid" value={dashboard.partially_paid_count} highlight />
+              <SummaryRow label="Unpaid" value={dashboard.unpaid_count} />
             </dl>
             <Button asChild className="mt-7 h-11 w-full rounded-xl bg-white font-bold text-[#102a43] hover:bg-slate-100">
               <Link href="/payments/new">Allocate a payment<ArrowUpRight /></Link>

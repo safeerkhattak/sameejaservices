@@ -20,7 +20,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       if (allocations.length) throw new Error("An invoice with a recorded payment cannot be edited.");
 
       const productIds = [...new Set(payload.items.map((item) => item.product_id).filter((value): value is string => Boolean(value)))];
-      if (productIds.length !== payload.items.length) throw new Error("Select a product for every invoice line.");
+      if (payload.items.some((item) => !item.product_id)) throw new Error("Select a product for every invoice line.");
       const productRows = await tx.select().from(products).where(inArray(products.id, productIds));
       if (productRows.length !== productIds.length) throw new Error("One or more selected products no longer exist.");
       const productMap = new Map(productRows.map((product) => [product.id, product]));
