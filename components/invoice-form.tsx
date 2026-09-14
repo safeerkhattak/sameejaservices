@@ -149,7 +149,7 @@ export function InvoiceForm({
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,35,55,.04)]">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div><h2 className="font-bold text-[#102a43]">Received articles</h2><p className="mt-0.5 text-sm text-slate-500">Choose an article, then enter received quantity and Metro rate.</p></div>
+            <div><h2 className="font-bold text-[#102a43]">Received articles</h2><p className="mt-0.5 text-sm text-slate-500">Choose an article, then confirm its unit and enter the received quantity and rate.</p></div>
             <Button type="button" variant="outline" className="rounded-xl" onClick={() => append({ ...blankItem })} disabled={products.length === 0}><Plus />Add article</Button>
           </div>
           {products.length === 0 ? (
@@ -165,7 +165,7 @@ export function InvoiceForm({
                 <TableHead className="min-w-[250px] px-6">Article</TableHead>
                 <TableHead className="min-w-[105px]">MGM #</TableHead>
                 <TableHead className="min-w-[105px]">Subsys #</TableHead>
-                <TableHead className="min-w-[90px]">Unit</TableHead>
+                <TableHead className="min-w-[110px]">Unit</TableHead>
                 <TableHead className="min-w-[120px]">Quantity</TableHead>
                 <TableHead className="min-w-[120px]">Rate</TableHead>
                 <TableHead className="min-w-[130px] text-right">Price</TableHead>
@@ -195,7 +195,7 @@ export function InvoiceForm({
                     </TableCell>
                     <TableCell className="py-4"><Input {...form.register(`items.${index}.mgmCode`)} readOnly className="h-11 rounded-xl bg-slate-50" /></TableCell>
                     <TableCell className="py-4"><Input {...form.register(`items.${index}.subsysCode`)} readOnly className="h-11 rounded-xl bg-slate-50" /></TableCell>
-                    <TableCell className="py-4"><Input {...form.register(`items.${index}.unit`)} readOnly className="h-11 rounded-xl bg-slate-50 text-center font-semibold" /></TableCell>
+                    <TableCell className="py-4"><Input {...form.register(`items.${index}.unit`)} placeholder="Kg" className="h-11 rounded-xl text-center font-semibold" aria-label={`Unit for article ${index + 1}`} /></TableCell>
                     <TableCell className="py-4"><Input inputMode="decimal" {...form.register(`items.${index}.quantity`)} placeholder="0.000" className="h-11 rounded-xl text-right tabular-nums" /></TableCell>
                     <TableCell className="py-4"><Input inputMode="decimal" {...form.register(`items.${index}.rate`)} placeholder="0" className="h-11 rounded-xl text-right tabular-nums" /></TableCell>
                     <TableCell className="py-4 text-right"><span className="inline-flex h-11 items-center font-bold tabular-nums text-[#102a43]">{formatPkr(linePaisa)}</span></TableCell>

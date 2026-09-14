@@ -9,7 +9,7 @@ A modern invoice and payment-tracking application for meat deliveries to Metro s
 - Combined customer payments are allocated only to invoices the owner explicitly selects.
 - The application never automatically settles other outstanding invoices.
 - Invoice numbers are generated automatically in a unique sequence, starting at `000173` when no higher number exists.
-- Only the owner can create, edit, activate, or deactivate catalog products.
+- Only the owner can create, edit, activate, or deactivate catalog products. Product unit and rate are editable defaults, while each invoice stores its final delivery-specific values.
 - Expenses, purchasing costs, labor, taxes, wastage, and profit tracking are intentionally out of scope.
 
 ## Technology

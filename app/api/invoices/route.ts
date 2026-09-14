@@ -53,7 +53,7 @@ export async function POST(request: Request) {
           mgmCode: product.mgmCode,
           subsysCode: product.subsysCode,
           articleName: product.articleName,
-          unit: product.unit,
+          unit: item.unit,
           quantityMillis: item.quantity_millis,
           ratePaisa: item.rate_paisa,
           totalPaisa: item.total_paisa,

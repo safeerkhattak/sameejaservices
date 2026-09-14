@@ -49,13 +49,14 @@ export function normalizeInvoicePayload(input: InvoiceInput) {
     const quantityMillis = parseKg(item.quantity);
     const ratePaisa = parsePkr(item.rate);
     const articleName = clean(item.articleName);
-    if (!articleName || quantityMillis === null || quantityMillis <= 0 || ratePaisa === null || ratePaisa <= 0) return null;
+    const unit = clean(item.unit);
+    if (!articleName || !unit || quantityMillis === null || quantityMillis <= 0 || ratePaisa === null || ratePaisa <= 0) return null;
     return {
       product_id: clean(item.productId) || null,
       mgm_code: clean(item.mgmCode),
       subsys_code: clean(item.subsysCode),
       article_name: articleName,
-      unit: clean(item.unit) || "Kg",
+      unit,
       quantity_millis: quantityMillis,
       rate_paisa: ratePaisa,
       total_paisa: Math.round((quantityMillis * ratePaisa) / 1000),

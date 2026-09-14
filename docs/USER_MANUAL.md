@@ -56,7 +56,7 @@ From the same Team screen, the master can reset a staff password, disable the ac
 1. Open **New invoice**.
 2. Enter the invoice date. The application assigns the next unique invoice number automatically when the draft is submitted.
 3. Enter the Metro store, store number and available reference details such as PO number and goods receiving number.
-4. For every delivered article, select the product and enter the received quantity and Metro rate. The product's unit is shown in its own invoice column.
+4. For every delivered article, select the product, enter the received quantity and Metro rate, and confirm or change the unit. The catalog unit is only a default for faster entry.
 5. Confirm the automatically calculated line prices and invoice total.
 6. Add an optional note.
 7. Select **Submit draft**.
@@ -67,11 +67,11 @@ After submission, a staff user cannot change the invoice. This protects the subm
 
 1. Sign in as the master user and open **Products**.
 2. Select **Add product**.
-3. Enter the article name, MGM code, Subsys code, unit and an optional default Metro rate.
+3. Enter the article name, MGM code, Subsys code, default unit and an optional default Metro rate.
 4. Keep measurements out of the article name; for example, use `Whole FQ Veal` as the article and `Kg` as its unit.
 5. Edit a product when its catalog details change, or deactivate it to remove it from new invoice entry.
 
-Deactivation never changes old invoices. Each invoice keeps the name, codes and unit that were saved when it was created.
+The default unit and rate can be changed on an invoice without changing the product. Deactivation never changes old invoices; each invoice keeps the name, codes, unit and rate saved for that delivery.
 
 ## 7. Reviewing and issuing invoices
 
