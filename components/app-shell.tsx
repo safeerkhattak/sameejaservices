@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Banknote, FilePlus2, LayoutDashboard, LogOut, PackageOpen, ReceiptText, Search, UsersRound } from "lucide-react";
+import { Banknote, FilePlus2, LayoutDashboard, LoaderCircle, LogOut, PackageOpen, ReceiptText, Search, UsersRound } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -33,6 +34,7 @@ const items = [
 
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   const pathname = usePathname();
+  const [signingOut, setSigningOut] = useState(false);
   const initials = user.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   const activeHref = pathname === "/"
     ? "/"
@@ -81,7 +83,12 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-bold">{initials || "SC"}</span>
               <span className="min-w-0"><span className="block truncate text-sm font-semibold">{user.displayName}</span><span className="block text-xs capitalize text-slate-400">{user.role}</span></span>
             </div>
-            <form action="/auth/signout" method="post" className="mt-3 border-t border-white/10 pt-3"><button type="submit" className="flex w-full items-center gap-2 text-xs font-medium text-slate-300 hover:text-white"><LogOut className="h-3.5 w-3.5" />Sign out</button></form>
+            <form action="/auth/signout" method="post" onSubmit={() => setSigningOut(true)} className="mt-3 border-t border-white/10 pt-3">
+              <button type="submit" disabled={signingOut} aria-busy={signingOut} className="flex w-full cursor-pointer items-center gap-2 text-xs font-medium text-slate-300 transition hover:text-white disabled:cursor-wait disabled:opacity-70">
+                {signingOut ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <LogOut className="h-3.5 w-3.5" aria-hidden="true" />}
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </form>
           </div>
         </SidebarFooter>
       </Sidebar>
