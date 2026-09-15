@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Banknote, FilePlus2, LayoutDashboard, LoaderCircle, LogOut, PackageOpen, ReceiptText, Search, UsersRound } from "lucide-react";
+import { Banknote, Building2, FilePlus2, LayoutDashboard, LoaderCircle, LogOut, PackageOpen, ReceiptText, Search, UsersRound } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -29,6 +29,7 @@ const items = [
   { label: "New invoice", href: "/invoices/new", icon: FilePlus2 },
   { label: "Payments", href: "/payments", icon: Banknote, ownerOnly: true },
   { label: "Products", href: "/products", icon: PackageOpen, ownerOnly: true },
+  { label: "Customers", href: "/customers", icon: Building2, ownerOnly: true },
   { label: "Team", href: "/team", icon: UsersRound, ownerOnly: true },
 ];
 
@@ -48,6 +49,8 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
           ? "/payments"
           : pathname.startsWith("/products")
             ? "/products"
+          : pathname.startsWith("/customers")
+            ? "/customers"
           : pathname.startsWith("/team")
             ? "/team"
             : "";

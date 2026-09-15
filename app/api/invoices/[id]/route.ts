@@ -1,7 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { requireApiMember } from "@/lib/authz";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
-import { auditLogs, invoiceItems, invoices, paymentAllocations, products } from "@/lib/db/schema";
+import { auditLogs, customers, invoiceItems, invoices, paymentAllocations, products } from "@/lib/db/schema";
 import { normalizeInvoicePayload } from "@/lib/invoice-payload";
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -19,6 +19,10 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       const allocations = await tx.select({ id: paymentAllocations.id }).from(paymentAllocations).where(eq(paymentAllocations.invoiceId, id)).limit(1);
       if (allocations.length) throw new Error("An invoice with a recorded payment cannot be edited.");
 
+      const customerRows = await tx.select().from(customers).where(eq(customers.id, payload.invoice.customer_id)).limit(1);
+      const customer = customerRows[0];
+      if (!customer) throw new Error("The selected customer no longer exists.");
+
       const productIds = [...new Set(payload.items.map((item) => item.product_id).filter((value): value is string => Boolean(value)))];
       if (payload.items.some((item) => !item.product_id)) throw new Error("Select a product for every invoice line.");
       const productRows = await tx.select().from(products).where(inArray(products.id, productIds));
@@ -26,8 +30,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       const productMap = new Map(productRows.map((product) => [product.id, product]));
 
       await tx.update(invoices).set({
-        customerName: payload.invoice.customer_name,
-        customerCity: payload.invoice.customer_city,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerCity: payload.invoice.customer_city || customer.city,
         supplierNumber: payload.invoice.supplier_number,
         storeNumber: payload.invoice.store_number,
         storeName: payload.invoice.store_name,

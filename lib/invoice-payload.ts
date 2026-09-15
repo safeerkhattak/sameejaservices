@@ -11,7 +11,7 @@ type InputItem = {
 };
 
 type InvoiceInput = {
-  customerName?: unknown;
+  customerId?: unknown;
   customerCity?: unknown;
   supplierNumber?: unknown;
   storeNumber?: unknown;
@@ -29,7 +29,7 @@ function clean(value: unknown) {
 
 export function normalizeInvoicePayload(input: InvoiceInput) {
   const invoice = {
-    customer_name: clean(input.customerName),
+    customer_id: clean(input.customerId),
     customer_city: clean(input.customerCity),
     supplier_number: clean(input.supplierNumber),
     store_number: clean(input.storeNumber),
@@ -40,7 +40,7 @@ export function normalizeInvoicePayload(input: InvoiceInput) {
     notes: clean(input.notes),
   };
 
-  if (!invoice.customer_name || !invoice.store_name || !/^\d{4}-\d{2}-\d{2}$/.test(invoice.invoice_date)) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invoice.customer_id) || !invoice.store_name || !/^\d{4}-\d{2}-\d{2}$/.test(invoice.invoice_date)) {
     throw new Error("Customer, store and a valid date are required.");
   }
 

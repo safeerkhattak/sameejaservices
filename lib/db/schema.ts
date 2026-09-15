@@ -33,9 +33,23 @@ export const products = pgTable("products", {
   check("products_default_rate_check", sql`${table.defaultRatePaisa} is null or ${table.defaultRatePaisa} >= 0`),
 ]);
 
+export const customers = pgTable("customers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  city: text("city").notNull().default(""),
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: uuid("created_by").notNull().references(() => appUsers.id),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_customers_name").on(table.name),
+  index("idx_customers_active").on(table.isActive),
+]);
+
 export const invoices = pgTable("invoices", {
   id: uuid("id").primaryKey().defaultRandom(),
   invoiceNumber: text("invoice_number").notNull(),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
   customerName: text("customer_name").notNull(),
   customerCity: text("customer_city").notNull().default(""),
   supplierNumber: text("supplier_number").notNull().default(""),
@@ -55,6 +69,7 @@ export const invoices = pgTable("invoices", {
   index("idx_invoices_date").on(table.invoiceDate),
   index("idx_invoices_status").on(table.status),
   index("idx_invoices_store").on(table.storeName),
+  index("idx_invoices_customer").on(table.customerId),
   check("invoices_status_check", sql`${table.status} in ('pending_review', 'issued', 'cancelled')`),
   check("invoices_total_check", sql`${table.totalPaisa} >= 0`),
 ]);
@@ -81,6 +96,7 @@ export const invoiceItems = pgTable("invoice_items", {
 
 export const payments = pgTable("payments", {
   id: uuid("id").primaryKey().defaultRandom(),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
   customerName: text("customer_name").notNull(),
   paymentDate: date("payment_date", { mode: "string" }).notNull(),
   amountPaisa: bigint("amount_paisa", { mode: "number" }).notNull(),
@@ -90,6 +106,7 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
 }, (table) => [
   index("idx_payments_date").on(table.paymentDate),
+  index("idx_payments_customer").on(table.customerId),
   check("payments_amount_check", sql`${table.amountPaisa} > 0`),
 ]);
 

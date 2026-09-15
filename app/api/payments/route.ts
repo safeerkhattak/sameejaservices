@@ -1,16 +1,18 @@
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { requireApiMember } from "@/lib/authz";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
-import { auditLogs, invoices, paymentAllocations, payments } from "@/lib/db/schema";
+import { auditLogs, customers, invoices, paymentAllocations, payments } from "@/lib/db/schema";
 import { parsePkr } from "@/lib/money";
-import { customerKey } from "@/lib/customer";
+import { z } from "zod";
+
+const idSchema = z.string().uuid();
 
 export async function POST(request: Request) {
   try {
     if (!isDatabaseConfigured()) return Response.json({ error: "Connect Supabase before saving real payments." }, { status: 503 });
     const member = await requireApiMember({ owner: true });
     const body = await request.json() as {
-      customerName?: string;
+      customerId?: string;
       paymentDate?: string;
       amount?: unknown;
       referenceNumber?: string;
@@ -18,8 +20,7 @@ export async function POST(request: Request) {
       allocations?: { invoiceId?: string; amount?: unknown }[];
     };
     const amountPaisa = parsePkr(body.amount);
-    if (!body.customerName?.trim() || !body.paymentDate || !amountPaisa || amountPaisa <= 0) throw new Error("Customer, payment date and amount are required.");
-    const selectedCustomerKey = customerKey(body.customerName);
+    if (!idSchema.safeParse(body.customerId).success || !body.paymentDate || !amountPaisa || amountPaisa <= 0) throw new Error("Customer, payment date and amount are required.");
     const allocations = (body.allocations ?? []).map((allocation) => ({
       invoiceId: allocation.invoiceId ?? "",
       amountPaisa: parsePkr(allocation.amount) ?? 0,
@@ -32,6 +33,9 @@ export async function POST(request: Request) {
       const invoiceIds = allocations.map((allocation) => allocation.invoiceId).sort();
       const invoiceRows = await tx.select().from(invoices).where(inArray(invoices.id, invoiceIds)).for("update");
       if (invoiceRows.length !== invoiceIds.length) throw new Error("One or more selected invoices no longer exist.");
+      const customerRows = await tx.select().from(customers).where(eq(customers.id, body.customerId!)).limit(1);
+      const customer = customerRows[0];
+      if (!customer) throw new Error("The selected customer no longer exists.");
       const paidRows = await tx.select({ invoiceId: paymentAllocations.invoiceId, paidPaisa: sql<number>`coalesce(sum(${paymentAllocations.amountPaisa}), 0)` })
         .from(paymentAllocations)
         .where(inArray(paymentAllocations.invoiceId, invoiceIds))
@@ -41,13 +45,14 @@ export async function POST(request: Request) {
       allocations.forEach((allocation) => {
         const invoice = invoiceRows.find((row) => row.id === allocation.invoiceId)!;
         if (invoice.status !== "issued") throw new Error("Payments can only be allocated to issued invoices.");
-        if (customerKey(invoice.customerName) !== selectedCustomerKey) throw new Error("All selected invoices must belong to the chosen customer.");
+        if (invoice.customerId !== customer.id) throw new Error("All selected invoices must belong to the chosen customer.");
         const balance = invoice.totalPaisa - (paidByInvoice.get(invoice.id) ?? 0);
         if (allocation.amountPaisa > balance) throw new Error(`Allocation exceeds the remaining balance on invoice ${invoice.invoiceNumber}.`);
       });
 
       const inserted = await tx.insert(payments).values({
-        customerName: body.customerName!.trim(),
+        customerId: customer.id,
+        customerName: customer.name,
         paymentDate: body.paymentDate!,
         amountPaisa,
         referenceNumber: body.referenceNumber?.trim() ?? "",

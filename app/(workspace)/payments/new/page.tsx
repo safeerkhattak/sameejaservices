@@ -1,17 +1,18 @@
 import { PageHeading } from "@/components/page-heading";
 import { PaymentForm } from "@/components/payment-form";
-import { getOpenInvoices, isDemoMode, paidAmount } from "@/lib/data";
+import { getCustomers, getOpenInvoices, isDemoMode, paidAmount } from "@/lib/data";
 import { requireOwner } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewPaymentPage() {
-  const [, invoices] = await Promise.all([requireOwner("/payments/new"), getOpenInvoices()]);
+  const [, invoices, customerRows] = await Promise.all([requireOwner("/payments/new"), getOpenInvoices(), getCustomers()]);
   return (
     <div className="mx-auto w-full max-w-[1480px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
       <PageHeading eyebrow="Owner action" title="Record a payment" description="Choose the invoices and allocation amounts yourself. The system will not apply payments automatically." />
       <PaymentForm
         demoMode={isDemoMode()}
+        customers={customerRows.map((customer) => ({ id: customer.id, name: customer.name, city: customer.city }))}
         invoices={invoices.map((invoice) => ({
           id: invoice.id,
           invoiceNumber: invoice.invoice_number,
@@ -20,7 +21,7 @@ export default async function NewPaymentPage() {
           totalPaisa: invoice.total_paisa,
           paidPaisa: paidAmount(invoice),
           balancePaisa: Math.max(0, invoice.total_paisa - paidAmount(invoice)),
-          customerName: invoice.customer_name,
+          customerId: invoice.customer_id,
         }))}
       />
     </div>

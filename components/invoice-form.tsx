@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { ArrowLeft, CheckCircle2, FileText, Loader2, LockKeyhole, PackageOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Building2, CheckCircle2, FileText, Loader2, LockKeyhole, PackageOpen, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { formatPkr } from "@/lib/money";
 import { todayForDateInput } from "@/lib/date";
+import { customerLabel } from "@/lib/customer-label";
 
 export type InvoiceProductOption = {
   id: string;
@@ -23,6 +24,13 @@ export type InvoiceProductOption = {
   articleName: string;
   unit: string;
   defaultRate: string;
+  isActive: boolean;
+};
+
+export type InvoiceCustomerOption = {
+  id: string;
+  name: string;
+  city: string;
   isActive: boolean;
 };
 
@@ -37,7 +45,7 @@ const itemSchema = z.object({
 });
 
 const formSchema = z.object({
-  customerName: z.string().trim().min(1),
+  customerId: z.string().uuid(),
   customerCity: z.string(),
   supplierNumber: z.string(),
   storeNumber: z.string(),
@@ -59,16 +67,20 @@ export function InvoiceForm({
   initialValues,
   demoMode,
   products,
+  customers,
   assignedInvoiceNumber,
   canManageProducts = false,
+  canManageCustomers = false,
 }: {
   mode?: "create" | "edit";
   invoiceId?: string;
   initialValues?: InvoiceFormValues;
   demoMode: boolean;
   products: InvoiceProductOption[];
+  customers: InvoiceCustomerOption[];
   assignedInvoiceNumber?: string;
   canManageProducts?: boolean;
+  canManageCustomers?: boolean;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [isNavigating, startNavigation] = useTransition();
@@ -76,8 +88,8 @@ export function InvoiceForm({
   const today = todayForDateInput();
   const form = useForm<InvoiceFormValues>({
     defaultValues: initialValues ?? {
-      customerName: "Metro Cash & Carry Pakistan (Pvt.) Ltd",
-      customerCity: "",
+      customerId: customers[0]?.id ?? "",
+      customerCity: customers[0]?.city ?? "",
       supplierNumber: "23558",
       storeNumber: "",
       storeName: "",
@@ -89,6 +101,7 @@ export function InvoiceForm({
     },
   });
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" });
+  const customerId = useWatch({ control: form.control, name: "customerId" });
   const items = useWatch({ control: form.control, name: "items" }) ?? [];
   const totalPaisa = items.reduce(
     (sum, item) => sum + Math.round((Number(item.quantity) || 0) * (Number(item.rate) || 0) * 100),
@@ -145,9 +158,27 @@ export function InvoiceForm({
             <Field label="Customer city"><Input {...form.register("customerCity")} placeholder="e.g. Lahore" className="h-11 rounded-xl" /></Field>
             <Field label="PO number"><Input {...form.register("poNumber")} placeholder="Purchase order reference" className="h-11 rounded-xl" /></Field>
             <Field label="Goods receiving number"><Input {...form.register("goodsReceivingNumber")} placeholder="Metro receiving reference" className="h-11 rounded-xl" /></Field>
-            <Field label="Customer" className="sm:col-span-2 lg:col-span-1"><Input {...form.register("customerName")} className="h-11 rounded-xl" /></Field>
+            <Field label="Customer" required className="sm:col-span-2 lg:col-span-1">
+              <Select value={customerId || undefined} onValueChange={(nextCustomerId) => {
+                const customer = customers.find((entry) => entry.id === nextCustomerId);
+                form.setValue("customerId", nextCustomerId);
+                if (customer?.city) form.setValue("customerCity", customer.city);
+              }}>
+                <SelectTrigger className="h-11 w-full rounded-xl"><SelectValue placeholder="Select customer" /></SelectTrigger>
+                <SelectContent>{customers.map((customer) => <SelectItem key={customer.id} value={customer.id} disabled={!customer.isActive}>{customerLabel(customer, customers)}{!customer.isActive ? " (inactive)" : ""}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
           </div>
         </section>
+
+        {customers.length === 0 && (
+          <section className="grid place-items-center rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-[0_10px_30px_rgba(15,35,55,.04)]">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-500"><Building2 className="h-6 w-6" /></span>
+            <h3 className="mt-4 font-bold text-[#102a43]">No customers are available</h3>
+            <p className="mt-1 max-w-md text-sm leading-6 text-slate-500">{canManageCustomers ? "Create a customer before entering an invoice." : "Ask the master user to add and activate the customer first."}</p>
+            {canManageCustomers && <Button asChild className="mt-5 rounded-xl bg-[#2b7a78] hover:bg-[#246b69]"><Link href="/customers"><Plus />Add first customer</Link></Button>}
+          </section>
+        )}
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,35,55,.04)]">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -223,7 +254,7 @@ export function InvoiceForm({
           <p className="mt-4 text-3xl font-bold tracking-[-0.04em]">{formatPkr(totalPaisa)}</p>
           <p className="mt-1 text-sm text-slate-300">{items.filter((item) => Number(item.quantity) > 0 && Number(item.rate) > 0).length} completed articles</p>
           {mode === "create" && <div className="mt-6 flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#f5b942]" /><p className="text-xs leading-5 text-slate-300">After submission, staff cannot edit this draft. The owner can review and make changes.</p></div>}
-          <Button type="submit" disabled={submitting || isNavigating || demoMode || products.length === 0} aria-busy={submitting || isNavigating} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">
+          <Button type="submit" disabled={submitting || isNavigating || demoMode || products.length === 0 || customers.length === 0} aria-busy={submitting || isNavigating} className="mt-6 h-12 w-full rounded-xl bg-[#f5b942] font-bold text-[#102a43] hover:bg-[#ffc955] disabled:opacity-60">
             {submitting || isNavigating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{submitting || isNavigating ? (mode === "edit" ? "Updating invoice…" : "Submitting draft…") : demoMode ? "Connect Supabase to save" : mode === "edit" ? "Update invoice" : "Submit draft"}
           </Button>
         </div>

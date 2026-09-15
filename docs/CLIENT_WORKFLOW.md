@@ -12,6 +12,7 @@ The current version intentionally does not manage meat purchase costs, expenses,
 
 The owner has full access. The owner can:
 
+- manage customers;
 - manage the product catalogue;
 - create invoices;
 - review and edit submitted invoice drafts;
@@ -27,7 +28,9 @@ Staff can create and submit invoice drafts. Once submitted, staff cannot edit th
 
 ## Initial setup
 
-The owner first opens **Products** and adds the articles used on invoices. Each product contains:
+The owner first opens **Customers** and creates each company that receives deliveries. Every customer receives a permanent internal ID. Names are only display information, so two different customers may have the same name without their invoices or payments being mixed. Editing a customer's name does not change its identity. Deactivating a customer prevents new invoices while preserving all history.
+
+The owner then opens **Products** and adds the articles used on invoices. Each product contains:
 
 - article name;
 - MGM code;
@@ -43,7 +46,7 @@ The owner then opens **Team** to create staff accounts. Each staff member receiv
 
 1. The owner or staff member selects **New invoice**.
 2. The system assigns the next unique invoice number automatically when the invoice is submitted.
-3. The user enters the delivery date, customer, Metro store, supplier number, store number, PO number, and goods-receiving number.
+3. The user selects the customer record, then enters the delivery date, Metro store, supplier number, store number, PO number, and goods-receiving number. The invoice is linked to the selected customer's unique ID, not its name.
 4. The user adds one or more products from the catalogue.
 5. For every line, the user confirms or changes the unit, then enters the delivered quantity and Metro rate.
 6. The software calculates each line price and the complete invoice total.
@@ -58,7 +61,7 @@ An invoice may be cancelled only when no payment has been recorded against it. C
 Only the owner can record a payment.
 
 1. The owner selects **Record payment** or **Allocate a payment**.
-2. The software shows every issued invoice for the selected customer that still has a balance.
+2. The software shows every issued invoice linked to the selected customer's unique ID that still has a balance. Similar or identical customer names cannot cause invoices to be mixed.
 3. The owner enters the payment date, exact amount received, and an optional bank-transfer or cheque reference.
 4. The owner manually selects the invoice or invoices covered by that payment.
 5. The owner enters the amount to apply to each selected invoice.

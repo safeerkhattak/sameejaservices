@@ -15,38 +15,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { formatPkr } from "@/lib/money";
 import { todayForDateInput } from "@/lib/date";
-import { customerKey, uniqueCustomerNames } from "@/lib/customer";
+import { customerLabel } from "@/lib/customer-label";
 
-type OpenInvoice = { id: string; invoiceNumber: string; storeName: string; invoiceDate: string; totalPaisa: number; paidPaisa: number; balancePaisa: number; customerName: string };
-type FormValues = { customerName: string; paymentDate: string; amount: string; referenceNumber: string; notes: string };
+type OpenInvoice = { id: string; invoiceNumber: string; storeName: string; invoiceDate: string; totalPaisa: number; paidPaisa: number; balancePaisa: number; customerId: string };
+type PaymentCustomer = { id: string; name: string; city: string };
+type FormValues = { customerId: string; paymentDate: string; amount: string; referenceNumber: string; notes: string };
 
 const paymentSchema = z.object({
-  customerName: z.string().trim().min(1),
+  customerId: z.string().uuid(),
   paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   amount: z.string().refine((value) => Number(value) > 0),
   referenceNumber: z.string(),
   notes: z.string(),
 });
 
-export function PaymentForm({ invoices, demoMode }: { invoices: OpenInvoice[]; demoMode: boolean }) {
+export function PaymentForm({ invoices, customers, demoMode }: { invoices: OpenInvoice[]; customers: PaymentCustomer[]; demoMode: boolean }) {
   const router = useRouter();
-  const customers = uniqueCustomerNames(invoices.map((invoice) => invoice.customerName));
+  const availableCustomers = customers.filter((customer) => invoices.some((invoice) => invoice.customerId === customer.id));
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [isNavigating, startNavigation] = useTransition();
   const form = useForm<FormValues>({
     defaultValues: {
-      customerName: customers[0] ?? "Metro Cash & Carry Pakistan (Pvt.) Ltd",
+      customerId: availableCustomers[0]?.id ?? "",
       paymentDate: todayForDateInput(),
       amount: "",
       referenceNumber: "",
       notes: "",
     },
   });
-  const customerName = useWatch({ control: form.control, name: "customerName" });
+  const customerId = useWatch({ control: form.control, name: "customerId" });
   const amount = useWatch({ control: form.control, name: "amount" });
-  const visibleInvoices = invoices.filter((invoice) => customerKey(invoice.customerName) === customerKey(customerName));
+  const visibleInvoices = invoices.filter((invoice) => invoice.customerId === customerId);
   const paymentPaisa = Math.round((Number(amount) || 0) * 100);
   const allocatedPaisa = useMemo(
     () => Object.entries(allocations).reduce((sum, [id, value]) => sum + (selected[id] ? Math.round((Number(value) || 0) * 100) : 0), 0),
@@ -98,9 +99,9 @@ export function PaymentForm({ invoices, demoMode }: { invoices: OpenInvoice[]; d
           </div>
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <Field label="Customer">
-              <Select value={customerName} onValueChange={(value) => { form.setValue("customerName", value); setSelected({}); setAllocations({}); }}>
+              <Select value={customerId || undefined} onValueChange={(value) => { form.setValue("customerId", value); setSelected({}); setAllocations({}); }}>
                 <SelectTrigger className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger>
-                <SelectContent>{(customers.length ? customers : [customerName]).map((customer) => <SelectItem key={customer} value={customer}>{customer}</SelectItem>)}</SelectContent>
+                <SelectContent>{availableCustomers.map((customer) => <SelectItem key={customer.id} value={customer.id}>{customerLabel(customer, availableCustomers)}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
             <Field label="Payment date"><Input type="date" {...form.register("paymentDate")} className="h-11 rounded-xl" /></Field>

@@ -2,17 +2,17 @@ import { notFound, redirect } from "next/navigation";
 import { InvoiceForm, type InvoiceFormValues } from "@/components/invoice-form";
 import { PageHeading } from "@/components/page-heading";
 import { requireMember } from "@/lib/authz";
-import { getInvoice, getProducts, isDemoMode } from "@/lib/data";
+import { getCustomers, getInvoice, getProducts, isDemoMode } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [member, invoice, productRows] = await Promise.all([requireMember("/invoices/" + id + "/edit"), getInvoice(id), getProducts()]);
+  const [member, invoice, productRows, customerRows] = await Promise.all([requireMember("/invoices/" + id + "/edit"), getInvoice(id), getProducts(), getCustomers()]);
   if (!invoice) notFound();
   if (member.role !== "owner") redirect("/invoices/" + id);
   const initialValues: InvoiceFormValues = {
-    customerName: invoice.customer_name,
+    customerId: invoice.customer_id,
     customerCity: invoice.customer_city,
     supplierNumber: invoice.supplier_number,
     storeNumber: invoice.store_number,
@@ -32,5 +32,6 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     })),
   };
   const products = productRows.map((product) => ({ id: product.id, mgmCode: product.mgm_code, subsysCode: product.subsys_code, articleName: product.article_name, unit: product.unit, defaultRate: product.default_rate_paisa === null ? "" : String(product.default_rate_paisa / 100), isActive: product.is_active }));
-  return <div className="mx-auto w-full max-w-[1480px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9"><PageHeading eyebrow="Owner review" title={"Edit invoice " + invoice.invoice_number} description="Correct the draft or issued invoice while preserving a record of the change." /><InvoiceForm mode="edit" invoiceId={id} initialValues={initialValues} demoMode={isDemoMode()} products={products} assignedInvoiceNumber={invoice.invoice_number} canManageProducts /></div>;
+  const customers = customerRows.map((customer) => ({ id: customer.id, name: customer.name, city: customer.city, isActive: customer.is_active }));
+  return <div className="mx-auto w-full max-w-[1480px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9"><PageHeading eyebrow="Owner review" title={"Edit invoice " + invoice.invoice_number} description="Correct the draft or issued invoice while preserving a record of the change." /><InvoiceForm mode="edit" invoiceId={id} initialValues={initialValues} demoMode={isDemoMode()} products={products} customers={customers} assignedInvoiceNumber={invoice.invoice_number} canManageProducts canManageCustomers /></div>;
 }

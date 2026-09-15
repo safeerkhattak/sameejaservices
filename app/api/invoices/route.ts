@@ -1,6 +1,6 @@
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
-import { auditLogs, invoiceItems, invoices, products } from "@/lib/db/schema";
+import { auditLogs, customers, invoiceItems, invoices, products } from "@/lib/db/schema";
 import { requireApiMember } from "@/lib/authz";
 import { normalizeInvoicePayload } from "@/lib/invoice-payload";
 
@@ -19,6 +19,10 @@ export async function POST(request: Request) {
       const nextNumber = Math.max(173, Number(maxRows[0]?.value ?? 172) + 1);
       const invoiceNumber = String(nextNumber).padStart(6, "0");
 
+      const customerRows = await tx.select().from(customers).where(eq(customers.id, payload.invoice.customer_id)).limit(1);
+      const customer = customerRows[0];
+      if (!customer?.isActive) throw new Error("Select an active customer before submitting the invoice.");
+
       const productIds = [...new Set(payload.items.map((item) => item.product_id).filter((value): value is string => Boolean(value)))];
       if (payload.items.some((item) => !item.product_id)) throw new Error("Select a product for every invoice line.");
       const productRows = await tx.select().from(products).where(inArray(products.id, productIds));
@@ -29,8 +33,9 @@ export async function POST(request: Request) {
 
       const inserted = await tx.insert(invoices).values({
         invoiceNumber,
-        customerName: payload.invoice.customer_name,
-        customerCity: payload.invoice.customer_city,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerCity: payload.invoice.customer_city || customer.city,
         supplierNumber: payload.invoice.supplier_number,
         storeNumber: payload.invoice.store_number,
         storeName: payload.invoice.store_name,

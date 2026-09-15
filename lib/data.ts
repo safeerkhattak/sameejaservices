@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
-import { appUsers, invoiceItems, invoices, paymentAllocations, payments, products } from "@/lib/db/schema";
+import { appUsers, customers, invoiceItems, invoices, paymentAllocations, payments, products } from "@/lib/db/schema";
 import { isDemoModeEnabled } from "@/lib/demo";
 
 export type InvoiceItemRecord = {
@@ -28,9 +28,19 @@ export type ProductRecord = {
   updated_at: string;
 };
 
+export type CustomerRecord = {
+  id: string;
+  name: string;
+  city: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type InvoiceRecord = {
   id: string;
   invoice_number: string;
+  customer_id: string;
   customer_name: string;
   customer_city: string;
   supplier_number: string;
@@ -49,6 +59,7 @@ export type InvoiceRecord = {
 
 export type PaymentRecord = {
   id: string;
+  customer_id: string;
   customer_name: string;
   payment_date: string;
   amount_paisa: number;
@@ -83,6 +94,7 @@ const demoInvoices: InvoiceRecord[] = [
   {
     id: "demo-172",
     invoice_number: "172",
+    customer_id: "00000000-0000-4000-8000-000000000010",
     customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd",
     customer_city: "Lahore",
     supplier_number: "23558",
@@ -103,14 +115,14 @@ const demoInvoices: InvoiceRecord[] = [
       { id: "demo-4", product_id: null, position: 3, mgm_code: "338287", subsys_code: "256261", article_name: "Prime Whole Carcas Lamb", unit: "Kg", quantity_millis: 11300, rate_paisa: 245000, total_paisa: 2768500 },
     ],
   },
-  { id: "demo-171", invoice_number: "171", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", customer_city: "Multan", supplier_number: "23558", store_number: "18", store_name: "Multan", invoice_date: "2026-07-02", po_number: "618789944", goods_receiving_number: "587001", status: "issued", total_paisa: 24891600, notes: "", created_at: "2026-07-02T09:00:00Z", payment_allocations: [] },
-  { id: "demo-170", invoice_number: "170", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", customer_city: "Lahore", supplier_number: "23558", store_number: "12", store_name: "Lahore", invoice_date: "2026-06-28", po_number: "618789810", goods_receiving_number: "586925", status: "issued", total_paisa: 43108400, notes: "", created_at: "2026-06-28T09:00:00Z", payment_allocations: [{ amount_paisa: 43108400 }] },
-  { id: "demo-review", invoice_number: "173", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", customer_city: "Multan", supplier_number: "23558", store_number: "18", store_name: "Multan", invoice_date: "2026-07-08", po_number: "", goods_receiving_number: "", status: "pending_review", total_paisa: 19870000, notes: "", created_at: "2026-07-08T09:00:00Z", payment_allocations: [] },
+  { id: "demo-171", invoice_number: "171", customer_id: "00000000-0000-4000-8000-000000000010", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", customer_city: "Multan", supplier_number: "23558", store_number: "18", store_name: "Multan", invoice_date: "2026-07-02", po_number: "618789944", goods_receiving_number: "587001", status: "issued", total_paisa: 24891600, notes: "", created_at: "2026-07-02T09:00:00Z", payment_allocations: [] },
+  { id: "demo-170", invoice_number: "170", customer_id: "00000000-0000-4000-8000-000000000010", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", customer_city: "Lahore", supplier_number: "23558", store_number: "12", store_name: "Lahore", invoice_date: "2026-06-28", po_number: "618789810", goods_receiving_number: "586925", status: "issued", total_paisa: 43108400, notes: "", created_at: "2026-06-28T09:00:00Z", payment_allocations: [{ amount_paisa: 43108400 }] },
+  { id: "demo-review", invoice_number: "173", customer_id: "00000000-0000-4000-8000-000000000010", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", customer_city: "Multan", supplier_number: "23558", store_number: "18", store_name: "Multan", invoice_date: "2026-07-08", po_number: "", goods_receiving_number: "", status: "pending_review", total_paisa: 19870000, notes: "", created_at: "2026-07-08T09:00:00Z", payment_allocations: [] },
 ];
 
 const demoPayments: PaymentRecord[] = [
-  { id: "payment-1", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", payment_date: "2026-07-09", amount_paisa: 50357500, reference_number: "BANK-0907", notes: "", created_at: "2026-07-09T10:00:00Z", payment_allocations: [{ amount_paisa: 50357500, invoices: { invoice_number: "172", store_name: "Faisalabad" } }] },
-  { id: "payment-2", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", payment_date: "2026-07-08", amount_paisa: 43108400, reference_number: "BANK-0807", notes: "", created_at: "2026-07-08T11:30:00Z", payment_allocations: [{ amount_paisa: 43108400, invoices: { invoice_number: "170", store_name: "Multan" } }] },
+  { id: "payment-1", customer_id: "00000000-0000-4000-8000-000000000010", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", payment_date: "2026-07-09", amount_paisa: 50357500, reference_number: "BANK-0907", notes: "", created_at: "2026-07-09T10:00:00Z", payment_allocations: [{ amount_paisa: 50357500, invoices: { invoice_number: "172", store_name: "Faisalabad" } }] },
+  { id: "payment-2", customer_id: "00000000-0000-4000-8000-000000000010", customer_name: "Metro Cash & Carry Pakistan (Pvt.) Ltd", payment_date: "2026-07-08", amount_paisa: 43108400, reference_number: "BANK-0807", notes: "", created_at: "2026-07-08T11:30:00Z", payment_allocations: [{ amount_paisa: 43108400, invoices: { invoice_number: "170", store_name: "Multan" } }] },
 ];
 
 export function paidAmount(invoice: InvoiceRecord) {
@@ -366,6 +378,30 @@ export async function getProducts(options: { activeOnly?: boolean } = {}): Promi
     }));
 }
 
+export async function getCustomers(options: { activeOnly?: boolean } = {}): Promise<CustomerRecord[]> {
+  if (!isDatabaseConfigured()) return isDemoModeEnabled() ? [{
+    id: "00000000-0000-4000-8000-000000000010",
+    name: "Metro Cash & Carry Pakistan (Pvt.) Ltd",
+    city: "",
+    is_active: true,
+    created_at: "2026-07-01T00:00:00Z",
+    updated_at: "2026-07-01T00:00:00Z",
+  }] : [];
+  const rows = await getDatabase()
+    .select()
+    .from(customers)
+    .where(options.activeOnly ? eq(customers.isActive, true) : undefined)
+    .orderBy(asc(customers.name), asc(customers.city));
+  return rows.map((customer) => ({
+    id: customer.id,
+    name: customer.name,
+    city: customer.city,
+    is_active: customer.isActive,
+    created_at: customer.createdAt,
+    updated_at: customer.updatedAt,
+  }));
+}
+
 export function isDemoMode() {
   return isDemoModeEnabled();
 }
@@ -374,6 +410,7 @@ function toInvoiceRecord(row: typeof invoices.$inferSelect, items: InvoiceItemRe
   return {
     id: row.id,
     invoice_number: row.invoiceNumber,
+    customer_id: row.customerId,
     customer_name: row.customerName,
     customer_city: row.customerCity,
     supplier_number: row.supplierNumber,
@@ -412,6 +449,7 @@ function toPaymentRecord(
 ): PaymentRecord {
   return {
     id: payment.id,
+    customer_id: payment.customerId,
     customer_name: payment.customerName,
     payment_date: payment.paymentDate,
     amount_paisa: payment.amountPaisa,
