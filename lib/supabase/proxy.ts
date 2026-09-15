@@ -1,8 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
+import { isDemoModeEnabled } from "@/lib/demo";
 
 export async function updateSession(request: NextRequest) {
+  if (isDemoModeEnabled()) return NextResponse.next({ request });
+
   if (!isSupabaseAuthConfigured()) {
     const isAuthRoute = request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/auth/");
     if (isAuthRoute || request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next({ request });

@@ -54,7 +54,17 @@ export function PaymentForm({ invoices, customers, demoMode }: { invoices: OpenI
     [allocations, selected],
   );
   const remainingPaisa = paymentPaisa - allocatedPaisa;
+  const selectedCount = Object.values(selected).filter(Boolean).length;
   const canSubmit = paymentPaisa > 0 && remainingPaisa === 0 && Object.values(selected).some(Boolean);
+
+  function fillPaymentRemainder(invoice: OpenInvoice) {
+    const currentPaisa = selected[invoice.id] ? Math.round((Number(allocations[invoice.id]) || 0) * 100) : 0;
+    const unallocatedBeforeThisInvoice = Math.max(0, paymentPaisa - (allocatedPaisa - currentPaisa));
+    const nextPaisa = Math.min(invoice.balancePaisa, unallocatedBeforeThisInvoice);
+    if (nextPaisa <= 0) return;
+    setSelected((current) => ({ ...current, [invoice.id]: true }));
+    setAllocations((current) => ({ ...current, [invoice.id]: String(nextPaisa / 100) }));
+  }
 
   async function submit(values: FormValues) {
     const parsed = paymentSchema.safeParse(values);
@@ -112,11 +122,12 @@ export function PaymentForm({ invoices, customers, demoMode }: { invoices: OpenI
         </section>
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,35,55,.04)]">
-          <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="font-bold text-[#102a43]">Choose invoices manually</h2><p className="mt-1 text-sm text-slate-500">Select only the invoices Metro is paying, then enter the amount for each.</p></div>
+          <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="font-bold text-[#102a43]">Choose invoices manually</h2><p className="mt-1 text-sm text-slate-500">Select only the invoices covered by this payment, then enter the amount for each.</p></div>
           {visibleInvoices.length === 0 ? (
             <div className="px-6 py-14 text-center"><p className="font-semibold text-[#102a43]">No outstanding issued invoices</p><p className="mt-1 text-sm text-slate-500">Approved invoices with a balance will appear here.</p></div>
           ) : (
-            <Table>
+            <>
+            <div className="hidden overflow-x-auto md:block"><Table>
               <TableHeader><TableRow className="bg-slate-50/70 hover:bg-slate-50/70"><TableHead className="w-14 px-6" /><TableHead>Invoice</TableHead><TableHead>Store</TableHead><TableHead>Total</TableHead><TableHead>Balance</TableHead><TableHead className="min-w-[180px] pr-6">Allocate</TableHead></TableRow></TableHeader>
               <TableBody>{visibleInvoices.map((invoice) => {
                 const isSelected = Boolean(selected[invoice.id]);
@@ -129,11 +140,28 @@ export function PaymentForm({ invoices, customers, demoMode }: { invoices: OpenI
                     <TableCell className="font-medium">Metro {invoice.storeName}</TableCell>
                     <TableCell className="tabular-nums">{formatPkr(invoice.totalPaisa)}</TableCell>
                     <TableCell className="font-bold tabular-nums text-[#102a43]">{formatPkr(invoice.balancePaisa)}</TableCell>
-                    <TableCell className="pr-6"><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">Rs</span><Input disabled={!isSelected} value={allocations[invoice.id] ?? ""} onChange={(event) => setAllocations((current) => ({ ...current, [invoice.id]: event.target.value }))} inputMode="decimal" className={"h-10 rounded-xl pl-9 text-right tabular-nums " + (tooHigh ? "border-rose-400 focus-visible:ring-rose-300" : "")} placeholder="0" /></div>{tooHigh && <p className="mt-1 text-xs font-medium text-rose-600">Exceeds balance</p>}</TableCell>
+                    <TableCell className="pr-6"><AllocationInput invoice={invoice} isSelected={isSelected} value={allocations[invoice.id] ?? ""} tooHigh={tooHigh} canFill={paymentPaisa > 0} onChange={(value) => setAllocations((current) => ({ ...current, [invoice.id]: value }))} onFill={() => fillPaymentRemainder(invoice)} /></TableCell>
                   </TableRow>
                 );
               })}</TableBody>
-            </Table>
+            </Table></div>
+            <div className="divide-y divide-slate-100 md:hidden">{visibleInvoices.map((invoice) => {
+              const isSelected = Boolean(selected[invoice.id]);
+              const allocationPaisa = Math.round((Number(allocations[invoice.id]) || 0) * 100);
+              const tooHigh = allocationPaisa > invoice.balancePaisa;
+              return (
+                <article key={invoice.id} className={"p-5 transition " + (isSelected ? "bg-[#e7f3f2]/45" : "bg-white")}>
+                  <div className="flex items-start gap-3">
+                    <Checkbox checked={isSelected} onCheckedChange={(checked) => setSelected((current) => ({ ...current, [invoice.id]: checked === true }))} aria-label={"Select invoice " + invoice.invoiceNumber} className="mt-1" />
+                    <div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1"><div><p className="font-bold text-[#102a43]">INV-{invoice.invoiceNumber}</p><p className="text-xs text-slate-500">{formatDate(invoice.invoiceDate)}</p></div><p className="text-sm font-semibold text-slate-700">Metro {invoice.storeName}</p></div>
+                      <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-white/80 p-3 text-sm"><div><dt className="text-xs text-slate-500">Invoice total</dt><dd className="mt-1 font-semibold tabular-nums text-slate-700">{formatPkr(invoice.totalPaisa)}</dd></div><div><dt className="text-xs text-slate-500">Balance due</dt><dd className="mt-1 font-bold tabular-nums text-[#102a43]">{formatPkr(invoice.balancePaisa)}</dd></div></dl>
+                      <div className="mt-4"><Label className="mb-2 block text-xs font-semibold text-slate-600">Amount to allocate</Label><AllocationInput invoice={invoice} isSelected={isSelected} value={allocations[invoice.id] ?? ""} tooHigh={tooHigh} canFill={paymentPaisa > 0} onChange={(value) => setAllocations((current) => ({ ...current, [invoice.id]: value }))} onFill={() => fillPaymentRemainder(invoice)} /></div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}</div>
+            </>
           )}
         </section>
       </div>
@@ -141,6 +169,7 @@ export function PaymentForm({ invoices, customers, demoMode }: { invoices: OpenI
       <aside className="space-y-4 xl:sticky xl:top-[96px] xl:self-start">
         <div className="rounded-2xl bg-[#102a43] p-6 text-white shadow-[0_16px_40px_rgba(16,42,67,.18)]">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">Allocation check</p>
+          <p className="mt-2 text-xs text-slate-400">{selectedCount} {selectedCount === 1 ? "invoice" : "invoices"} selected</p>
           <dl className="mt-5 space-y-4"><AmountRow label="Payment received" value={paymentPaisa} /><AmountRow label="Allocated" value={allocatedPaisa} /><div className="border-t border-white/10 pt-4"><AmountRow label={remainingPaisa < 0 ? "Over-allocated" : "Left to allocate"} value={Math.abs(remainingPaisa)} highlight={remainingPaisa !== 0} /></div></dl>
           <div className="mt-6 flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#f5b942]" /><p className="text-xs leading-5 text-slate-300">Nothing is allocated automatically. Your chosen invoices and amounts are saved exactly as entered.</p></div>
           {remainingPaisa !== 0 && paymentPaisa > 0 && <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-400/10 p-3 text-xs text-amber-200"><AlertCircle className="h-4 w-4 shrink-0" />The full payment must be allocated before saving.</div>}
@@ -153,4 +182,7 @@ export function PaymentForm({ invoices, customers, demoMode }: { invoices: OpenI
 
 function Field({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) { return <div className={className}><Label className="mb-2 block text-sm font-semibold text-slate-700">{label}</Label>{children}</div>; }
 function AmountRow({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) { return <div className="flex items-center justify-between gap-4"><dt className="text-sm text-slate-300">{label}</dt><dd className={"font-bold tabular-nums " + (highlight ? "text-[#f5b942]" : "")}>{formatPkr(value)}</dd></div>; }
+function AllocationInput({ invoice, isSelected, value, tooHigh, canFill, onChange, onFill }: { invoice: OpenInvoice; isSelected: boolean; value: string; tooHigh: boolean; canFill: boolean; onChange: (value: string) => void; onFill: () => void }) {
+  return <div><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">Rs</span><Input disabled={!isSelected} type="number" min="0" max={invoice.balancePaisa / 100} step="0.01" value={value} onChange={(event) => onChange(event.target.value)} className={"h-10 rounded-xl pl-9 pr-3 text-right tabular-nums " + (tooHigh ? "border-rose-400 focus-visible:ring-rose-300" : "")} placeholder="0" aria-label={"Amount to allocate to invoice " + invoice.invoiceNumber} /></div><div className="mt-1.5 flex min-h-5 items-center justify-between gap-2">{tooHigh ? <p className="text-xs font-medium text-rose-600">Exceeds balance</p> : <span />}<button type="button" disabled={!isSelected || !canFill} onClick={onFill} className="cursor-pointer text-xs font-semibold text-[#2b7a78] hover:underline disabled:cursor-not-allowed disabled:text-slate-300 disabled:no-underline">Use payment remainder</button></div></div>;
+}
 function formatDate(value: string) { return new Intl.DateTimeFormat("en-PK", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value + "T00:00:00")); }

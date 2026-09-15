@@ -162,7 +162,7 @@ export function InvoiceForm({
               <Select value={customerId || undefined} onValueChange={(nextCustomerId) => {
                 const customer = customers.find((entry) => entry.id === nextCustomerId);
                 form.setValue("customerId", nextCustomerId);
-                if (customer?.city) form.setValue("customerCity", customer.city);
+                form.setValue("customerCity", customer?.city ?? "");
               }}>
                 <SelectTrigger className="h-11 w-full rounded-xl"><SelectValue placeholder="Select customer" /></SelectTrigger>
                 <SelectContent>{customers.map((customer) => <SelectItem key={customer.id} value={customer.id} disabled={!customer.isActive}>{customerLabel(customer, customers)}{!customer.isActive ? " (inactive)" : ""}</SelectItem>)}</SelectContent>
