@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { formatPkr } from "@/lib/money";
 import { todayForDateInput } from "@/lib/date";
+import { customerKey, uniqueCustomerNames } from "@/lib/customer";
 
 type OpenInvoice = { id: string; invoiceNumber: string; storeName: string; invoiceDate: string; totalPaisa: number; paidPaisa: number; balancePaisa: number; customerName: string };
 type FormValues = { customerName: string; paymentDate: string; amount: string; referenceNumber: string; notes: string };
@@ -29,7 +30,7 @@ const paymentSchema = z.object({
 
 export function PaymentForm({ invoices, demoMode }: { invoices: OpenInvoice[]; demoMode: boolean }) {
   const router = useRouter();
-  const customers = Array.from(new Set(invoices.map((invoice) => invoice.customerName)));
+  const customers = uniqueCustomerNames(invoices.map((invoice) => invoice.customerName));
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -45,7 +46,7 @@ export function PaymentForm({ invoices, demoMode }: { invoices: OpenInvoice[]; d
   });
   const customerName = useWatch({ control: form.control, name: "customerName" });
   const amount = useWatch({ control: form.control, name: "amount" });
-  const visibleInvoices = invoices.filter((invoice) => invoice.customerName === customerName);
+  const visibleInvoices = invoices.filter((invoice) => customerKey(invoice.customerName) === customerKey(customerName));
   const paymentPaisa = Math.round((Number(amount) || 0) * 100);
   const allocatedPaisa = useMemo(
     () => Object.entries(allocations).reduce((sum, [id, value]) => sum + (selected[id] ? Math.round((Number(value) || 0) * 100) : 0), 0),
