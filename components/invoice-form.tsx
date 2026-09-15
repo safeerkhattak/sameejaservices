@@ -151,7 +151,7 @@ export function InvoiceForm({
                 {assignedInvoiceNumber ? `INV-${assignedInvoiceNumber}` : "Assigned automatically when submitted"}
               </div>
             </Field>
-            <Field label="Invoice date" required><Input type="date" {...form.register("invoiceDate")} className="h-11 rounded-xl" /></Field>
+            <Field label="Invoice date" required><Input type="date" {...form.register("invoiceDate")} className="h-11 rounded-xl" /><p className="mt-1.5 text-xs text-slate-400">Defaults to today. Change it to the delivery date when billing an earlier delivery.</p></Field>
             <Field label="Supplier number"><Input {...form.register("supplierNumber")} placeholder="23558" className="h-11 rounded-xl" /></Field>
             <Field label="Store number"><Input {...form.register("storeNumber")} placeholder="e.g. 15" className="h-11 rounded-xl" /></Field>
             <Field label="Store name" required><Input {...form.register("storeName")} placeholder="e.g. Multan" className="h-11 rounded-xl" /></Field>
