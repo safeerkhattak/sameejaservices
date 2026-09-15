@@ -9,6 +9,7 @@ export function RegisterPagination({
   totalPages,
   totalRecords,
   query,
+  params,
 }: {
   basePath: string;
   page: number;
@@ -16,16 +17,18 @@ export function RegisterPagination({
   totalPages: number;
   totalRecords: number;
   query?: string;
+  params?: Record<string, string | undefined>;
 }) {
   if (totalRecords === 0) return null;
 
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, totalRecords);
   const href = (targetPage: number) => {
-    const params = new URLSearchParams();
-    if (query) params.set("q", query);
-    if (targetPage > 1) params.set("page", String(targetPage));
-    const suffix = params.toString();
+    const nextParams = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => { if (value) nextParams.set(key, value); });
+    if (query && !nextParams.has("q")) nextParams.set("q", query);
+    if (targetPage > 1) nextParams.set("page", String(targetPage));
+    const suffix = nextParams.toString();
     return suffix ? `${basePath}?${suffix}` : basePath;
   };
 

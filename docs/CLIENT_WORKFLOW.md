@@ -93,6 +93,12 @@ The owner dashboard shows:
 
 Staff see the information needed to submit drafts and follow their review status, without access to owner-only payment and management functions.
 
+## Finding and exporting records
+
+The **Invoices** register can be filtered by invoice/customer/store text, date range, exact customer record, and payment status. The **Payments** register can be filtered by customer/reference/invoice text, date range, and exact customer record. Active filters remain applied while moving between result pages.
+
+Use **Export Excel** for a sortable spreadsheet with real date and currency values, or **Export PDF** for a print-ready report. An export contains every record matching the active filters, not only the records visible on the current page. Invoice exports include totals, received amounts, and balances; payment exports include references and the invoices selected for each allocation.
+
 ## Example
 
 An issued invoice totals **Rs 35,000**. Metro pays **Rs 10,000** first:

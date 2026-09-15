@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db";
 import { appUsers, customers, invoiceItems, invoices, paymentAllocations, payments, products } from "@/lib/db/schema";
 import { isDemoModeEnabled } from "@/lib/demo";
+import type { InvoiceRegisterFilters, PaymentRegisterFilters } from "@/lib/register-filters";
 
 export type InvoiceItemRecord = {
   id: string;
@@ -228,29 +229,95 @@ export async function getDashboardData(): Promise<DashboardData> {
   };
 }
 
-export async function getInvoicePage(options: { query?: string; page?: number; pageSize?: number } = {}): Promise<PaginatedResult<InvoiceRecord>> {
+type InvoiceQueryOptions = Partial<InvoiceRegisterFilters>;
+type PaymentQueryOptions = Partial<PaymentRegisterFilters>;
+
+function invoiceWhere(options: InvoiceQueryOptions, allocationTotals: ReturnType<typeof invoiceAllocationTotals>) {
+  const conditions: SQL[] = [];
+  const query = options.q?.trim().slice(0, 100) ?? "";
+  if (query) {
+    const pattern = `%${query}%`;
+    conditions.push(or(
+      ilike(invoices.invoiceNumber, pattern),
+      ilike(invoices.customerName, pattern),
+      ilike(invoices.customerCity, pattern),
+      ilike(invoices.storeName, pattern),
+      ilike(invoices.supplierNumber, pattern),
+      ilike(invoices.poNumber, pattern),
+      ilike(invoices.goodsReceivingNumber, pattern),
+    )!);
+  }
+  if (options.from) conditions.push(gte(invoices.invoiceDate, options.from));
+  if (options.to) conditions.push(lte(invoices.invoiceDate, options.to));
+  if (options.customerId) conditions.push(eq(invoices.customerId, options.customerId));
+
+  const paid = sql`coalesce(${allocationTotals.paidPaisa}, 0)`;
+  if (options.status === "pending_review") conditions.push(eq(invoices.status, "pending_review"));
+  if (options.status === "cancelled") conditions.push(eq(invoices.status, "cancelled"));
+  if (options.status === "unpaid") conditions.push(and(eq(invoices.status, "issued"), sql`${paid} = 0`)!);
+  if (options.status === "partially_paid") conditions.push(and(eq(invoices.status, "issued"), sql`${paid} > 0`, sql`${paid} < ${invoices.totalPaisa}`)!);
+  if (options.status === "paid") conditions.push(and(eq(invoices.status, "issued"), sql`${paid} >= ${invoices.totalPaisa}`)!);
+  return conditions.length ? and(...conditions) : undefined;
+}
+
+function paymentWhere(options: PaymentQueryOptions) {
+  const conditions: SQL[] = [];
+  const query = options.q?.trim().slice(0, 100) ?? "";
+  if (query) {
+    const pattern = `%${query}%`;
+    conditions.push(or(
+      ilike(payments.customerName, pattern),
+      ilike(payments.referenceNumber, pattern),
+      ilike(payments.notes, pattern),
+      sql`exists (
+        select 1
+        from payment_allocations allocation_search
+        inner join invoices invoice_search on invoice_search.id = allocation_search.invoice_id
+        where allocation_search.payment_id = ${payments.id}
+          and (invoice_search.invoice_number ilike ${pattern} or invoice_search.store_name ilike ${pattern})
+      )`,
+    )!);
+  }
+  if (options.from) conditions.push(gte(payments.paymentDate, options.from));
+  if (options.to) conditions.push(lte(payments.paymentDate, options.to));
+  if (options.customerId) conditions.push(eq(payments.customerId, options.customerId));
+  return conditions.length ? and(...conditions) : undefined;
+}
+
+function filterDemoInvoices(records: InvoiceRecord[], options: InvoiceQueryOptions) {
+  const query = options.q?.toLowerCase() ?? "";
+  return records.filter((invoice) => {
+    const matchesQuery = !query || [invoice.invoice_number, invoice.customer_name, invoice.customer_city, invoice.store_name, invoice.supplier_number, invoice.po_number, invoice.goods_receiving_number].some((value) => value.toLowerCase().includes(query));
+    const matchesDates = (!options.from || invoice.invoice_date >= options.from) && (!options.to || invoice.invoice_date <= options.to);
+    const matchesCustomer = !options.customerId || invoice.customer_id === options.customerId;
+    const matchesStatus = !options.status || effectiveStatus(invoice) === options.status;
+    return matchesQuery && matchesDates && matchesCustomer && matchesStatus;
+  });
+}
+
+function filterDemoPayments(records: PaymentRecord[], options: PaymentQueryOptions) {
+  const query = options.q?.toLowerCase() ?? "";
+  return records.filter((payment) => {
+    const allocationText = (payment.payment_allocations ?? []).map((allocation) => `${allocation.invoices?.invoice_number ?? ""} ${allocation.invoices?.store_name ?? ""}`).join(" ");
+    const matchesQuery = !query || [payment.customer_name, payment.reference_number, payment.notes, allocationText].some((value) => value.toLowerCase().includes(query));
+    const matchesDates = (!options.from || payment.payment_date >= options.from) && (!options.to || payment.payment_date <= options.to);
+    const matchesCustomer = !options.customerId || payment.customer_id === options.customerId;
+    return matchesQuery && matchesDates && matchesCustomer;
+  });
+}
+
+export async function getInvoicePage(options: InvoiceQueryOptions & { page?: number; pageSize?: number } = {}): Promise<PaginatedResult<InvoiceRecord>> {
   const page = Math.max(1, Math.floor(options.page ?? 1));
   const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize ?? 50)));
-  const query = options.query?.trim().slice(0, 100) ?? "";
 
   if (!isDatabaseConfigured()) {
-    const filtered = query
-      ? demoInvoices.filter((invoice) => [invoice.invoice_number, invoice.store_name, invoice.po_number, invoice.goods_receiving_number].some((value) => value.toLowerCase().includes(query.toLowerCase())))
-      : demoInvoices;
+    const filtered = filterDemoInvoices(demoInvoices, options);
     return paginateRecords(filtered, page, pageSize);
   }
 
   const database = getDatabase();
   const allocationTotals = invoiceAllocationTotals(database);
-  const pattern = `%${query}%`;
-  const filter = query
-    ? or(
-        ilike(invoices.invoiceNumber, pattern),
-        ilike(invoices.storeName, pattern),
-        ilike(invoices.poNumber, pattern),
-        ilike(invoices.goodsReceivingNumber, pattern),
-      )
-    : undefined;
+  const filter = invoiceWhere(options, allocationTotals);
   const rows = await database
     .select({
       invoice: invoices,
@@ -272,6 +339,19 @@ export async function getInvoicePage(options: { query?: string; page?: number; p
     total_records: totalRecords,
     total_pages: Math.max(1, Math.ceil(totalRecords / pageSize)),
   };
+}
+
+export async function getInvoicesForExport(options: InvoiceQueryOptions = {}): Promise<InvoiceRecord[]> {
+  if (!isDatabaseConfigured()) return filterDemoInvoices(demoInvoices, options);
+  const database = getDatabase();
+  const allocationTotals = invoiceAllocationTotals(database);
+  const rows = await database
+    .select({ invoice: invoices, paidPaisa: sql<number>`coalesce(${allocationTotals.paidPaisa}, 0)`.mapWith(Number) })
+    .from(invoices)
+    .leftJoin(allocationTotals, eq(allocationTotals.invoiceId, invoices.id))
+    .where(invoiceWhere(options, allocationTotals))
+    .orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt));
+  return rows.map(({ invoice, paidPaisa }) => toInvoiceRecord(invoice, [], paidPaisa > 0 ? [{ amount_paisa: paidPaisa }] : []));
 }
 
 export async function getInvoice(id: string): Promise<InvoiceRecord | null> {
@@ -309,10 +389,10 @@ export async function getOpenInvoices() {
   return rows.map(({ invoice, paidPaisa }) => toInvoiceRecord(invoice, [], paidPaisa > 0 ? [{ amount_paisa: paidPaisa }] : []));
 }
 
-export async function getPaymentPage(options: { page?: number; pageSize?: number } = {}): Promise<PaginatedResult<PaymentRecord>> {
+export async function getPaymentPage(options: PaymentQueryOptions & { page?: number; pageSize?: number } = {}): Promise<PaginatedResult<PaymentRecord>> {
   const page = Math.max(1, Math.floor(options.page ?? 1));
   const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize ?? 50)));
-  if (!isDatabaseConfigured()) return paginateRecords(isDemoModeEnabled() ? demoPayments : [], page, pageSize);
+  if (!isDatabaseConfigured()) return paginateRecords(isDemoModeEnabled() ? filterDemoPayments(demoPayments, options) : [], page, pageSize);
 
   const database = getDatabase();
   const rows = await database.select({
@@ -334,6 +414,7 @@ export async function getPaymentPage(options: { page?: number; pageSize?: number
       .from(payments)
       .leftJoin(paymentAllocations, eq(paymentAllocations.paymentId, payments.id))
       .leftJoin(invoices, eq(invoices.id, paymentAllocations.invoiceId))
+      .where(paymentWhere(options))
       .groupBy(payments.id)
       .orderBy(desc(payments.paymentDate), desc(payments.createdAt))
       .limit(pageSize)
@@ -347,6 +428,32 @@ export async function getPaymentPage(options: { page?: number; pageSize?: number
     total_records: totalRecords,
     total_pages: Math.max(1, Math.ceil(totalRecords / pageSize)),
   };
+}
+
+export async function getPaymentsForExport(options: PaymentQueryOptions = {}): Promise<PaymentRecord[]> {
+  if (!isDatabaseConfigured()) return isDemoModeEnabled() ? filterDemoPayments(demoPayments, options) : [];
+  const rows = await getDatabase().select({
+    payment: payments,
+    allocations: sql<{ amount_paisa: number; invoice_number: string; store_name: string }[]>`
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'amount_paisa', ${paymentAllocations.amountPaisa},
+            'invoice_number', ${invoices.invoiceNumber},
+            'store_name', ${invoices.storeName}
+          ) order by ${paymentAllocations.createdAt}
+        ) filter (where ${paymentAllocations.id} is not null),
+        '[]'::jsonb
+      )
+    `,
+  })
+    .from(payments)
+    .leftJoin(paymentAllocations, eq(paymentAllocations.paymentId, payments.id))
+    .leftJoin(invoices, eq(invoices.id, paymentAllocations.invoiceId))
+    .where(paymentWhere(options))
+    .groupBy(payments.id)
+    .orderBy(desc(payments.paymentDate), desc(payments.createdAt));
+  return rows.map(({ payment, allocations }) => toPaymentRecord(payment, allocations));
 }
 
 export async function getTeam(): Promise<{ id: string; display_name: string; email: string; role: "owner" | "staff"; is_active: boolean; created_at: string }[]> {
