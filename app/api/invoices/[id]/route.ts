@@ -71,3 +71,32 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     return Response.json({ error: message.length > 220 ? "Could not update the invoice. Check the details and try again." : message }, { status: 400 });
   }
 }
+
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    if (!isDatabaseConfigured()) return Response.json({ error: "Connect Supabase before deleting invoices." }, { status: 503 });
+    const { id } = await context.params;
+    const member = await requireApiMember({ owner: true });
+
+    await getDatabase().transaction(async (tx) => {
+      const current = await tx.select().from(invoices).where(eq(invoices.id, id)).for("update").limit(1);
+      if (!current[0]) throw new Error("Invoice not found.");
+      const allocations = await tx.select({ id: paymentAllocations.id }).from(paymentAllocations).where(eq(paymentAllocations.invoiceId, id)).limit(1);
+      if (allocations.length) throw new Error("An invoice with a recorded payment cannot be deleted. Reverse the payment first.");
+
+      // Hard delete so the invoice number is freed. Deleting the most recent
+      // invoice(s) lets the next invoice reuse the number (max + 1); deleting a
+      // middle invoice leaves a permanent gap.
+      await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
+      await tx.delete(invoices).where(eq(invoices.id, id));
+      await tx.insert(auditLogs).values({ actorId: member.id, action: "deleted", entityType: "invoice", entityId: id, details: { invoiceNumber: current[0].invoiceNumber } });
+    });
+
+    return Response.json({ id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not delete the invoice.";
+    if (message === "AUTH_REQUIRED") return Response.json({ error: "Sign in to continue." }, { status: 401 });
+    if (message === "OWNER_REQUIRED") return Response.json({ error: "Owner access is required." }, { status: 403 });
+    return Response.json({ error: message.length > 220 ? "Could not delete the invoice." : message }, { status: 400 });
+  }
+}

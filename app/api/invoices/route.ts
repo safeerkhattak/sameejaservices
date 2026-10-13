@@ -16,8 +16,10 @@ export async function POST(request: Request) {
       const maxRows = await tx.select({
         value: sql<number>`coalesce(max(case when ${invoices.invoiceNumber} ~ '^[0-9]+$' then ${invoices.invoiceNumber}::bigint end), 172)`,
       }).from(invoices);
-      // The client's invoice sequence begins at 175, so never allocate a lower number.
-      const nextNumber = Math.max(175, Number(maxRows[0]?.value ?? 172) + 1);
+      // The client's invoice sequence begins at 176, so never allocate a lower number.
+      // Using max(existing) + 1 means deleting the most recent invoices frees their
+      // numbers for reuse, while deleting a middle invoice leaves a permanent gap.
+      const nextNumber = Math.max(176, Number(maxRows[0]?.value ?? 172) + 1);
       const invoiceNumber = String(nextNumber).padStart(6, "0");
 
       const customerRows = await tx.select().from(customers).where(eq(customers.id, payload.invoice.customer_id)).limit(1);

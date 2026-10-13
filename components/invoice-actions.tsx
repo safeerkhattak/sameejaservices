@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Edit3, Loader2, Printer, XCircle } from "lucide-react";
+import { CheckCircle2, Edit3, Loader2, Printer, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,8 +21,9 @@ import {
 export function InvoiceActions({ invoiceId, status, isOwner, demoMode }: { invoiceId: string; status: string; isOwner: boolean; demoMode: boolean }) {
   const router = useRouter();
   const [busyStatus, setBusyStatus] = useState<"issued" | "cancelled" | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isRefreshing, startRefresh] = useTransition();
-  const isBusy = busyStatus !== null || isRefreshing;
+  const isBusy = busyStatus !== null || isRefreshing || isDeleting;
 
   async function setStatus(nextStatus: "issued" | "cancelled") {
     if (demoMode) {
@@ -49,6 +50,24 @@ export function InvoiceActions({ invoiceId, status, isOwner, demoMode }: { invoi
     }
   }
 
+  async function deleteInvoice() {
+    if (demoMode) {
+      toast.info("Connect Supabase to delete invoices.");
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/invoices/" + invoiceId, { method: "DELETE" });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Invoice could not be deleted.");
+      toast.success("Invoice deleted. Its number is free to reuse.");
+      router.push("/invoices");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Invoice could not be deleted.");
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className="flex flex-wrap gap-3 print:hidden">
       <Button variant="outline" className="h-11 rounded-xl bg-white" onClick={() => window.print()}><Printer />Print invoice</Button>
@@ -60,6 +79,15 @@ export function InvoiceActions({ invoiceId, status, isOwner, demoMode }: { invoi
           <AlertDialogContent className="rounded-2xl">
             <AlertDialogHeader><AlertDialogTitle>Cancel this invoice?</AlertDialogTitle><AlertDialogDescription>The invoice will remain in the audit history but will no longer count toward outstanding balances.</AlertDialogDescription></AlertDialogHeader>
             <AlertDialogFooter><AlertDialogCancel disabled={isBusy}>Keep invoice</AlertDialogCancel><AlertDialogAction variant="destructive" disabled={isBusy} onClick={() => setStatus("cancelled")}>{busyStatus === "cancelled" ? <Loader2 className="animate-spin" /> : <XCircle />}{busyStatus === "cancelled" ? "Cancelling…" : "Cancel invoice"}</AlertDialogAction></AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+      {isOwner && (
+        <AlertDialog>
+          <AlertDialogTrigger asChild><Button variant="outline" className="h-11 cursor-pointer rounded-xl border-rose-300 bg-white text-rose-700 hover:bg-rose-50" disabled={isBusy}>{isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}{isDeleting ? "Deleting…" : "Delete"}</Button></AlertDialogTrigger>
+          <AlertDialogContent className="rounded-2xl">
+            <AlertDialogHeader><AlertDialogTitle>Delete this invoice?</AlertDialogTitle><AlertDialogDescription>This permanently removes the invoice and frees its number for reuse — it cannot be undone. An invoice with a recorded payment cannot be deleted; reverse the payment first.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel disabled={isBusy}>Keep invoice</AlertDialogCancel><AlertDialogAction variant="destructive" disabled={isBusy} onClick={deleteInvoice}>{isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}{isDeleting ? "Deleting…" : "Delete invoice"}</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
