@@ -306,12 +306,26 @@ function filterDemoPayments(records: PaymentRecord[], options: PaymentQueryOptio
   });
 }
 
+// Invoice registers are ordered by invoice number, highest (newest) first.
+// Numbers are stored zero-padded, but we sort on the numeric value so any
+// legacy un-padded numbers still order correctly.
+const invoiceNumberOrdering: SQL[] = [
+  sql`case when ${invoices.invoiceNumber} ~ '^[0-9]+$' then ${invoices.invoiceNumber}::bigint end desc nulls last`,
+  desc(invoices.createdAt),
+];
+
+function byInvoiceNumberDesc(a: InvoiceRecord, b: InvoiceRecord) {
+  const an = /^\d+$/.test(a.invoice_number) ? Number(a.invoice_number) : -Infinity;
+  const bn = /^\d+$/.test(b.invoice_number) ? Number(b.invoice_number) : -Infinity;
+  return bn - an;
+}
+
 export async function getInvoicePage(options: InvoiceQueryOptions & { page?: number; pageSize?: number } = {}): Promise<PaginatedResult<InvoiceRecord>> {
   const page = Math.max(1, Math.floor(options.page ?? 1));
   const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize ?? 50)));
 
   if (!isDatabaseConfigured()) {
-    const filtered = filterDemoInvoices(demoInvoices, options);
+    const filtered = filterDemoInvoices(demoInvoices, options).sort(byInvoiceNumberDesc);
     return paginateRecords(filtered, page, pageSize);
   }
 
@@ -327,7 +341,7 @@ export async function getInvoicePage(options: InvoiceQueryOptions & { page?: num
     .from(invoices)
     .leftJoin(allocationTotals, eq(allocationTotals.invoiceId, invoices.id))
     .where(filter)
-    .orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt))
+    .orderBy(...invoiceNumberOrdering)
     .limit(pageSize)
     .offset((page - 1) * pageSize);
   const totalRecords = rows[0]?.totalCount ?? 0;
@@ -342,7 +356,7 @@ export async function getInvoicePage(options: InvoiceQueryOptions & { page?: num
 }
 
 export async function getInvoicesForExport(options: InvoiceQueryOptions = {}): Promise<InvoiceRecord[]> {
-  if (!isDatabaseConfigured()) return filterDemoInvoices(demoInvoices, options);
+  if (!isDatabaseConfigured()) return filterDemoInvoices(demoInvoices, options).sort(byInvoiceNumberDesc);
   const database = getDatabase();
   const allocationTotals = invoiceAllocationTotals(database);
   const rows = await database
@@ -350,7 +364,7 @@ export async function getInvoicesForExport(options: InvoiceQueryOptions = {}): P
     .from(invoices)
     .leftJoin(allocationTotals, eq(allocationTotals.invoiceId, invoices.id))
     .where(invoiceWhere(options, allocationTotals))
-    .orderBy(desc(invoices.invoiceDate), desc(invoices.createdAt));
+    .orderBy(...invoiceNumberOrdering);
   return rows.map(({ invoice, paidPaisa }) => toInvoiceRecord(invoice, [], paidPaisa > 0 ? [{ amount_paisa: paidPaisa }] : []));
 }
 
